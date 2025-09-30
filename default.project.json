@@ -16,6 +16,15 @@
       "$className": "StarterPlayer",
       "$ignoreUnknownInstances": true,
       "$path": "src/StarterPlayer"
-    }
+    },
+    "Packages": {
+      "$path": "Packages"
+    },
+    "DevPackages": {
+      "$path": "DevPackages"
+    },
+    "Project": {
+				"$path": "src"
+		}
   }
 }

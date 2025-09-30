@@ -23,6 +23,10 @@ rokit add wally
 ```
 rokit add lune
 ```
+- Run-in-roblox: https://github.com/rojo-rbx/run-in-roblox
+```
+rokit add rojo-rbx/run-in-roblox
+```
 - Jest-Lua: https://jsdotlua.github.io/jest-lua/
 ```
 wally install

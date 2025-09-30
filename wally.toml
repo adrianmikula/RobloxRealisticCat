@@ -12,3 +12,6 @@ TestEZ = "roblox/testez@^0.4.1"
 [dev-dependencies]
 Jest = "jsdotlua/jest@3.10.0"
 JestGlobals = "jsdotlua/jest-globals@3.10.0"
+
+[tools]
+run-in-roblox = { source = "rojo-rbx/run-in-roblox", version = "0.3.0" }
