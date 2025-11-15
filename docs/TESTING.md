@@ -123,3 +123,98 @@ Lune shines for your use case—it's designed for Roblox devs doing local testin
 If you share more on your code (e.g., heavy API use?), I can refine this.
 
 
+
+The error you're encountering is a known limitation with the "Run in Roblox" (RIR) plugin when working with Rojo projects that use Wally (or similar package managers like those integrated via Rokit) for dependency management. The `@DevPackages` alias in your `require` statements (e.g., `require("@DevPackages/Jest")`) is a filesystem-level shortcut created by Wally/Rokit during `wally install`. This alias resolves to your project's `Packages/Dev` folder in your local development environment, but RIR doesn't fully support these symbolic links or aliases during its sync process—it attempts to interpret them as literal Roblox paths, leading to the "unsupported alias" failure in the plugin's path resolution logic (around line 79-84 of the RIR main module).
+
+This is especially common in testing setups like yours with `jest-lua`, where dev dependencies (e.g., `JestGlobals` and `Jest` from the `jsdotlua` registry) are required via `@DevPackages`. RIR is great for quick script execution in Studio but skips advanced Rojo features like alias resolution, which `rojo serve` handles seamlessly.
+
+### Quick Fix: Use `rojo serve` for Testing
+The standard workflow for Rojo + Wally/Rokit + `jest-lua` is to sync your project via `rojo serve` and run tests in Studio (or via CLI tools). This ensures aliases resolve correctly because Rojo builds the full instance hierarchy, including the `Packages` folder.
+
+1. **Start Rojo Sync**:
+   - In your project root (where `default.project.json` lives), run:
+     ```
+     rojo serve
+     ```
+   - Open your `.rbxl` or `.rbxlx` place file in Roblox Studio.
+   - In Studio, go to **Plugins > Rojo > Connect** (or use the Rojo toolbar button). Your local files will sync to the game's `ReplicatedStorage` (or wherever your project.json maps `src` and `Packages`).
+
+2. **Run Tests in Studio**:
+   - With sync active, create or use your test entrypoint script (e.g., `scripts/run-tests.lua` in your project, synced to `ReplicatedStorage` or `ServerScriptService`).
+   - Example `run-tests.lua` (adapt paths as needed; this assumes your tests are in `src` and packages in `Packages`):
+     ```lua
+     local ReplicatedStorage = game:GetService("ReplicatedStorage")
+     local runCLI = require(ReplicatedStorage.Packages.Dev.Jest).runCLI  -- Uses resolved package path, no alias needed here
+
+     local status, result = runCLI(ReplicatedStorage.Packages.Project, { verbose = true }, { ReplicatedStorage.Packages.Project }):awaitStatus()
+
+     if status == "Rejected" then
+         warn("Test failure:", result)
+     elseif status == "Resolved" and (result.results.numFailedTestSuites > 0 or result.results.numFailedTests > 0) then
+         warn("Tests failed!")
+     else
+         print("All tests passed!")
+     end
+     ```
+   - Right-click the synced `run-tests` script in Explorer (e.g., under `ServerScriptService`) and select **Run** (or use Studio's **Script Analysis > Run Locally** if it's a LocalScript).
+   - Check the **Output** window for test results. `jest-lua` will print passes/failures verbosely if `verbose = true`.
+
+3. **Verify Project Setup** (if tests still fail on requires):
+   - Ensure your `wally.toml` has dev deps like:
+     ```toml
+     [dev-dependencies]
+     JestGlobals = "jsdotlua/jest-globals@0.22.0"
+     Jest = "jsdotlua/jest@0.22.0"
+     ```
+   - Run `wally install` to populate `Packages`.
+   - Your `default.project.json` should map `Packages` (full folder) and `src` (your project code/tests):
+     ```json
+     {
+       "name": "YourProject",
+       "tree": {
+         "$className": "DataModel",
+         "ReplicatedStorage": {
+           "$className": "ReplicatedStorage",
+           "$path": "src",
+           "Packages": {
+             "$path": "../Packages"
+           }
+         },
+         "ServerScriptService": {
+           "$path": "server"
+         }
+         // Add other services as needed
+       }
+     }
+     ```
+   - In test files (e.g., `src/specs/my-test.spec.lua`), use the resolved path:
+     ```lua
+     local JestGlobals = require(script.Parent.Parent.Packages.Dev.JestGlobals)
+     local describe = JestGlobals.describe
+     local it = JestGlobals.it
+     local expect = JestGlobals.expect
+
+     -- Your tests here
+     ```
+     Avoid `@DevPackages` in code that runs in Roblox—it's purely for local tooling like VS Code IntelliSense.
+
+### Alternative: CLI Testing (No Studio Needed)
+For faster iteration or CI/CD:
+- Install `roblox-cli` (via `rokit install roblox-cli` or npm/yarn).
+- Enable the `FFlagEnableLoadModule` fast flag in Studio (File > Settings > Script Editor > enable it) or via CLI flags.
+- Run:
+  ```
+  roblox-cli run --load.model default.project.json --run scripts/run-tests.lua --fastFlags.overrides FFlagEnableLoadModule=true
+  ```
+- This spins up a headless Roblox instance, loads your Rojo project, and executes the test script. It handles Wally packages better than RIR.
+
+### If You Must Use RIR
+- Temporarily remove `@DevPackages` aliases from your test files and use relative paths (e.g., `require(ReplicatedStorage.Packages.Dev.Jest)` after manual sync).
+- Or exclude `Packages` from RIR's sync scope in the plugin settings (if available—check RIR's config in Studio Plugins tab).
+- But this is brittle; switch to `rojo serve` long-term.
+
+If this doesn't resolve it, share your `default.project.json`, `wally.toml`, and the exact `require` line causing the error for more targeted help. For deeper troubleshooting, check the Rojo Discord or DevForum threads on Wally integration.
+
+
+
+

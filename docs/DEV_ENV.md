@@ -32,3 +32,11 @@ rokit add rojo-rbx/run-in-roblox
 wally install
 ```
 - Rojo: https://rojo.space/docs/v7/getting-started/installation/
+```
+wally add rojo-rbx/rojo
+rojo plugin install
+```
+- Roblox-CLI
+```
+rokit add roblox-cli
+```
