@@ -24,7 +24,11 @@
       "$path": "DevPackages"
     },
     "Project": {
-				"$path": "src"
-		}
+      "$path": "src"
+    },
+    "__tests__": {
+      "$path": "src/__tests__",
+      "$ignoreUnknownInstances": true
+    }
   }
 }
