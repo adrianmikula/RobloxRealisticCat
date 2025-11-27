@@ -79,6 +79,67 @@ function CatService.Client:InteractWithCat(player, catId, interactionType, inter
 	return result
 end
 
+-- Client method for spawning cats
+function CatService.Client:SpawnCat(player, profileType, position)
+	-- Generate a unique cat ID
+	local catId = "player_cat_" .. player.UserId .. "_" .. os.time()
+	
+	-- Create the cat on the server
+	local catData = CatService:CreateCat(catId, profileType or "Friendly")
+	
+	-- Set position if provided
+	if position then
+		catData.currentState.position = position
+	end
+	
+	print("Spawned cat for player", player.Name, "cat ID:", catId, "profile:", profileType or "Friendly")
+	
+	return catId, catData
+end
+
+-- Client method for getting all cats
+function CatService.Client:GetAllCats(player)
+	-- Return a safe copy of active cats (without sensitive data)
+	local safeCats = {}
+	
+	for catId, catData in pairs(CatService.ActiveCats) do
+		safeCats[catId] = {
+			currentState = catData.currentState,
+			moodState = catData.moodState,
+			behaviorState = catData.behaviorState,
+			profile = {
+				personality = catData.profile.personality,
+				breed = catData.profile.breed
+			}
+		}
+	end
+	
+	return safeCats
+end
+
+-- Client method for getting player tools
+function CatService.Client:GetPlayerTools(player)
+	local PlayerManager = CatService.Components.PlayerManager
+	if PlayerManager then
+		return PlayerManager.PlayerTools[player.UserId] or {}
+	end
+	return {}
+end
+
+-- Client method for equipping tools
+function CatService.Client:EquipTool(player, toolType)
+	local PlayerManager = CatService.Components.PlayerManager
+	if PlayerManager then
+		local success = PlayerManager:EquipTool(player, toolType)
+		if success then
+			return {success = true, message = "Tool equipped: " .. toolType}
+		else
+			return {success = false, message = "Failed to equip tool: " .. toolType}
+		end
+	end
+	return {success = false, message = "PlayerManager not available"}
+end
+
 function CatService:UpdatePlayerRelationship(player, catId, relationshipChange)
 	CatService.Components.RelationshipManager:UpdateRelationship(player, catId, relationshipChange)
 end

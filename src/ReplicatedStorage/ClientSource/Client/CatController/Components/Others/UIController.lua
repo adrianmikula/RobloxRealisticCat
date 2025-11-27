@@ -43,7 +43,7 @@ end
 
 function UIController.Init()
 	-- Component initialization
-	CatService = Knit.GetService("CatService")
+	-- CatService reference will be set by parent controller
 	print("UIController initialized")
 end
 

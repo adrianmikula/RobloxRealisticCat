@@ -227,9 +227,36 @@ end
 function CatRenderer.Init()
 	-- Get reference to parent CatController
 	local CatController = script.Parent.Parent.Parent
-	CatService = CatController.CatService
 	
 	print("CatRenderer component initialized")
+end
+
+function CatRenderer:CullDistantCats()
+	-- Cull distant cats based on performance settings
+	local player = game.Players.LocalPlayer
+	local character = player.Character
+	
+	if not character or not character:FindFirstChild("HumanoidRootPart") then
+		return
+	end
+	
+	local playerPosition = character.HumanoidRootPart.Position
+	
+	-- Get all active cat visuals
+	for catId, catVisual in pairs(CatRenderer.ActiveCatVisuals or {}) do
+		if catVisual and catVisual.PrimaryPart then
+			local distance = (catVisual.PrimaryPart.Position - playerPosition).Magnitude
+			
+			-- Simple distance-based culling
+			if distance > 200 then -- Max render distance
+				catVisual.Parent = nil -- Hide the cat
+			else
+				catVisual.Parent = workspace -- Show the cat
+			end
+		end
+	end
+	
+	print("Culled distant cats based on player position")
 end
 
 function CatRenderer.Start()

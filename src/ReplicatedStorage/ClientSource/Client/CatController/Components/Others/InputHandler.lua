@@ -55,28 +55,45 @@ end
 function InputHandler:SelectTool(toolType)
 	if InputHandler:IsOnCooldown("ToolSelect") then return end
 	
+	-- Get parent controller
+	local CatController = script.Parent.Parent.Parent
+	
 	-- Check if player has this tool unlocked
 	local player = Players.LocalPlayer
-	local hasTool = CatService:GetPlayerTools(player)[toolType]
-	
-	if not hasTool then
-		InputHandler:ShowNotification("Tool not unlocked: " .. toolType)
-		return
-	end
-	
-	-- Equip the tool
-	local result = CatService:EquipTool(toolType)
-	if result.success then
-		InputHandler.CurrentTool = toolType
-		InputHandler:ShowNotification("Equipped: " .. InputHandler:GetToolDisplayName(toolType))
-		
-		-- Play equip sound/effect
-		InputHandler:PlayToolEquipEffect(toolType)
-	else
-		InputHandler:ShowNotification(result.message or "Failed to equip tool")
-	end
-	
-	InputHandler:SetCooldown("ToolSelect", 0.5)
+	CatController:GetPlayerTools()
+		:andThen(function(playerTools)
+			local hasTool = playerTools[toolType]
+			
+			if not hasTool then
+				InputHandler:ShowNotification("Tool not unlocked: " .. toolType)
+				return
+			end
+			
+			-- Equip the tool
+			CatController:EquipTool(toolType)
+				:andThen(function(result)
+					if result.success then
+						InputHandler.CurrentTool = toolType
+						InputHandler:ShowNotification("Equipped: " .. InputHandler:GetToolDisplayName(toolType))
+						InputHandler:UpdateToolVisuals()
+						
+						-- Play equip sound/effect
+						InputHandler:PlayToolEquipEffect(toolType)
+						
+						print("Selected tool:", toolType)
+					else
+						InputHandler:ShowNotification(result.message or "Failed to equip tool")
+					end
+					
+					InputHandler:SetCooldown("ToolSelect", 0.5)
+				end)
+				:catch(function(err)
+					warn("Failed to equip tool:", err)
+				end)
+		end)
+		:catch(function(err)
+			warn("Failed to get player tools:", err)
+		end)
 end
 
 function InputHandler:UnequipTool()
@@ -231,27 +248,34 @@ function InputHandler:UpdateNearbyCats()
 	local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
 	if not humanoidRootPart then return end
 	
+	-- Get parent controller
+	local CatController = script.Parent.Parent.Parent
+	
 	-- Get all cats from service
-	local allCats = CatService:GetAllCats()
-	
-	-- Filter nearby cats
-	InputHandler.NearbyCats = {}
-	for catId, catData in pairs(allCats) do
-		local catPosition = catData.currentState.position
-		local distance = (humanoidRootPart.Position - catPosition).Magnitude
-		
-		if distance <= InputHandler.InteractionRange * 2 then -- Double range for "nearby" detection
-			table.insert(InputHandler.NearbyCats, {
-				catId = catId,
-				position = catPosition,
-				distance = distance,
-				catData = catData
-			})
-		end
-	end
-	
-	-- Update UI with nearby cat count
-	InputHandler:UpdateNearbyCatUI(#InputHandler.NearbyCats)
+	CatController:GetAllCats()
+		:andThen(function(allCats)
+			-- Filter nearby cats
+			InputHandler.NearbyCats = {}
+			for catId, catData in pairs(allCats) do
+				local catPosition = catData.currentState.position
+				local distance = (humanoidRootPart.Position - catPosition).Magnitude
+				
+				if distance <= InputHandler.InteractionRange * 2 then -- Double range for "nearby" detection
+					table.insert(InputHandler.NearbyCats, {
+						catId = catId,
+						position = catPosition,
+						distance = distance,
+						catData = catData
+					})
+				end
+			end
+			
+			-- Update UI with nearby cat count
+			InputHandler:UpdateNearbyCatUI(#InputHandler.NearbyCats)
+		end)
+		:catch(function(err)
+			warn("Failed to get cats for nearby detection:", err)
+		end)
 end
 
 function InputHandler:UpdateNearbyCatUI(catCount)

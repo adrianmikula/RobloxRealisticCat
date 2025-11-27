@@ -25,13 +25,16 @@ local CatService
 
 -- Cat data accessors
 function module:GetCatState(catId)
-	if not CatService then return nil end
-	return CatService:GetCatState(catId)
+	local CatController = script.Parent.Parent.Parent
+	if not CatController.CatService then return nil end
+	return CatController.CatService:GetCatState(catId)
 end
 
 function module:GetAllCats()
-	if not CatService then return {} end
-	return CatService:GetAllCats()
+	local CatController = script.Parent.Parent.Parent
+	if not CatController.CatService then return {} end
+	-- This should be called as a promise
+	return CatController.CatService:GetAllCats()
 end
 
 function module:GetNearbyCats(playerPosition, range)

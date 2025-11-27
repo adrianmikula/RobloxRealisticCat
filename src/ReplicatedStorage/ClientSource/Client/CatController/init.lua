@@ -110,6 +110,24 @@ function CatController:CleanupAllActions()
 	CatController.Components.ActionHandler:CleanupAllActions()
 end
 
+-- Client method wrappers for components
+function CatController:GetPlayerTools()
+	if not CatService then return {} end
+	return CatService:GetPlayerTools()
+end
+
+function CatController:EquipTool(toolType)
+	if not CatService then 
+		return {success = false, message = "CatService not available"}
+	end
+	return CatService:EquipTool(toolType)
+end
+
+function CatController:GetAllCats()
+	if not CatService then return {} end
+	return CatService:GetAllCats()
+end
+
 function CatController:CleanupAllTools()
 	CatController.Components.ToolManager:CleanupAllTools()
 end
@@ -138,10 +156,15 @@ function CatController:KnitStart()
 	-- Initialize existing cats
 	task.spawn(function()
 		task.wait(2) -- Wait for server to be ready
-		local allCats = CatService:GetAllCats()
-		for catId, catData in pairs(allCats) do
-			CatController:HandleCatStateUpdate(catId, "created", catData)
-		end
+		CatService:GetAllCats()
+			:andThen(function(allCats)
+				for catId, catData in pairs(allCats) do
+					CatController:HandleCatStateUpdate(catId, "created", catData)
+				end
+			end)
+			:catch(function(err)
+				warn("Failed to get initial cats:", err)
+			end)
 	end)
 	
 	-- Start performance optimization loop
@@ -157,6 +180,9 @@ end
 
 function CatController:KnitInit() 
 	CatService = Knit.GetService("CatService")
+	
+	-- Store CatService reference for components to access
+	CatController.CatService = CatService
 	
 	componentsInitializer(script)
 	
