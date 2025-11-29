@@ -13,8 +13,9 @@ function TestCommands:HandleTestCommand(player, command, args)
         
         for i = 1, count do
             local catId = "test_cmd_" .. player.UserId .. "_" .. i .. "_" .. os.time()
-            local catData = CatService.Components.CatManager:CreateCat(catId, profileType)
-            CatService.ActiveCats[catId] = catData
+            
+            -- Use the service's CreateCat method directly
+            local catData = TestCommands.ParentService:CreateCat(catId, profileType)
             
             -- Position near player
             local character = player.Character
@@ -28,7 +29,7 @@ function TestCommands:HandleTestCommand(player, command, args)
         return true
         
     elseif command == "listcats" then
-        local allCats = CatService.ActiveCats
+        local allCats = TestCommands.ParentService:GetAllCats()
         local count = 0
         for _ in pairs(allCats) do count = count + 1 end
         
@@ -41,11 +42,11 @@ function TestCommands:HandleTestCommand(player, command, args)
         return true
         
     elseif command == "clearcats" then
-        local allCats = CatService.ActiveCats
+        local allCats = TestCommands.ParentService:GetAllCats()
         local count = 0
         
         for catId in pairs(allCats) do
-            CatService.ActiveCats[catId] = nil
+            TestCommands.ParentService:RemoveCat(catId)
             count += 1
         end
         
@@ -57,8 +58,7 @@ function TestCommands:HandleTestCommand(player, command, args)
         
         -- Spawn a test cat for AI testing
         local catId = "ai_test_" .. os.time()
-        local catData = CatService.Components.CatManager:CreateCat(catId, "Curious")
-        CatService.ActiveCats[catId] = catData
+        local catData = TestCommands.ParentService:CreateCat(catId, "Curious")
         
         print("✅ Created AI test cat:", catId)
         print("   Initial state:", catData.behaviorState.currentAction)
@@ -113,21 +113,15 @@ end
 
 -- Component initialization
 function TestCommands.Init()
-    -- Get reference to parent CatService
-    CatService = script.Parent.Parent.Parent
+    -- Store reference to parent service
+    TestCommands.ParentService = script.Parent.Parent.Parent
     
     print("TestCommands component initialized")
 end
 
 function TestCommands.Start()
-    -- Setup chat commands
-    TestCommands:SetupChatCommands()
-    
-    print("TestCommands component started - Chat commands available:")
-    print("   /spawncat [profile] [count] - Spawn test cats")
-    print("   /listcats - List all current cats")
-    print("   /clearcats - Remove all cats")
-    print("   /testai - Test AI system")
+    -- Disabled - Use SimpleCatTest.lua instead
+    print("TestCommands component started - DISABLED (use SimpleCatTest.lua)")
 end
 
 return TestCommands

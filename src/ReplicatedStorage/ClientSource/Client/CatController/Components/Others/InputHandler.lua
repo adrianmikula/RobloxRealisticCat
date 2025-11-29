@@ -257,17 +257,16 @@ function InputHandler:UpdateNearbyCats()
 			catId = "test_cat_1",
 			position = humanoidRootPart.Position + Vector3.new(5, 0, 5),
 			distance = 7.07,
-						catData = catData
-					})
-				end
-			end
-			
-			-- Update UI with nearby cat count
-			InputHandler:UpdateNearbyCatUI(#InputHandler.NearbyCats)
-		end)
-		:catch(function(err)
-			warn("Failed to get cats for nearby detection:", err)
-		end)
+			catData = {
+				currentState = {position = humanoidRootPart.Position + Vector3.new(5, 0, 5)},
+				moodState = {currentMood = "Happy"},
+				behaviorState = {currentAction = "Idle"}
+			}
+		})
+	end
+	
+	-- Update UI with nearby cat count
+	InputHandler:UpdateNearbyCatUI(#InputHandler.NearbyCats)
 end
 
 function InputHandler:UpdateNearbyCatUI(catCount)
@@ -313,6 +312,13 @@ function InputHandler:PlayInteractionEffect(interactionType, success)
 	-- Play sound/effect for interaction result
 	-- This would be implemented with actual sounds/particles
 	print("Interaction effect:", interactionType, "Success:", success)
+end
+
+function InputHandler:UpdateToolVisuals()
+	-- Update UI to show current tool
+	-- This would update a tool indicator in the UI
+	-- For now, just log the current tool
+	print("Tool visuals updated:", InputHandler.CurrentTool)
 end
 
 function InputHandler:GetToolDisplayName(toolType)
