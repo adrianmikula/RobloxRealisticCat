@@ -18,34 +18,43 @@ function ToolManager:EquipTool(toolType)
 	
 	-- Check if player has this tool
 	local player = Players.LocalPlayer
-	local hasTool = CatService:GetPlayerTools(player)[toolType]
+	local CatController = script.Parent.Parent.Parent
 	
-	if not hasTool then
-		ToolManager:ShowNotification("Tool not unlocked: " .. toolType)
-		return false
-	end
-	
-	-- Create tool visual
-	local toolInstance = ToolManager:CreateToolVisual(toolType)
-	if not toolInstance then
-		ToolManager:ShowNotification("Failed to create tool: " .. toolType)
-		return false
-	end
-	
-	-- Equip the tool to player
-	ToolManager:AttachToolToPlayer(toolInstance)
-	
-	-- Store tool reference
-	ToolManager.EquippedTool = toolType
-	ToolManager.ToolInstances[toolType] = toolInstance
-	
-	-- Play equip effect
-	ToolManager:PlayEquipEffect(toolType)
-	
-	ToolManager:ShowNotification("Equipped: " .. ToolManager:GetToolDisplayName(toolType))
-	
-	print("Tool equipped:", toolType)
-	return true
+	CatController:GetPlayerTools()
+		:andThen(function(playerTools)
+			local hasTool = playerTools[toolType]
+			
+			if not hasTool then
+				ToolManager:ShowNotification("Tool not unlocked: " .. toolType)
+				return false
+			end
+			
+			-- Create tool visual
+			local toolInstance = ToolManager:CreateToolVisual(toolType)
+			if not toolInstance then
+				ToolManager:ShowNotification("Failed to create tool: " .. toolType)
+				return false
+			end
+			
+			-- Equip the tool to player
+			ToolManager:AttachToolToPlayer(toolInstance)
+			
+			-- Store tool reference
+			ToolManager.EquippedTool = toolType
+			ToolManager.ToolInstances[toolType] = toolInstance
+			
+			-- Play equip effect
+			ToolManager:PlayEquipEffect(toolType)
+			
+			ToolManager:ShowNotification("Equipped: " .. ToolManager:GetToolDisplayName(toolType))
+			
+			print("Tool equipped:", toolType)
+			return true
+		end)
+		:catch(function(err)
+			warn("Failed to get player tools:", err)
+			return false
+		end)
 end
 
 function ToolManager:UnequipTool()
@@ -380,10 +389,6 @@ end
 
 -- Component initialization
 function ToolManager.Init()
-	-- Get reference to parent CatController
-	local CatController = script.Parent.Parent.Parent
-	CatService = CatController.CatService
-	
 	print("ToolManager component initialized")
 end
 

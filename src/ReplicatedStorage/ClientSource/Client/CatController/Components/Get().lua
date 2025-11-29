@@ -90,18 +90,21 @@ end
 
 -- Player data accessors
 function module:GetPlayerTools(player)
-	if not CatService then return {} end
-	return CatService:GetPlayerTools(player)
+	local CatController = script.Parent.Parent.Parent
+	if not CatController.CatService then return {} end
+	return CatController.CatService:GetPlayerTools(player)
 end
 
 function module:GetPlayerSettings(player)
-	if not CatService then return {} end
-	return CatService:GetPlayerSettings(player)
+	local CatController = script.Parent.Parent.Parent
+	if not CatController.CatService then return {} end
+	return CatController.CatService:GetPlayerSettings(player)
 end
 
 function module:GetPlayerStats(player)
-	if not CatService then return {} end
-	return CatService:GetPlayerStats(player)
+	local CatController = script.Parent.Parent.Parent
+	if not CatController.CatService then return {} end
+	return CatController.CatService:GetPlayerStats(player)
 end
 
 function module:GetEquippedTool()
@@ -250,10 +253,6 @@ function module.Start()
 end
 
 function module.Init()
-	-- Get reference to CatService
-	local CatController = script.Parent.Parent.Parent
-	CatService = CatController.CatService
-	
 	print("CatController Get() component initialized")
 end
 

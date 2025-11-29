@@ -195,9 +195,10 @@ function AnimationHandler:GetCatVisual(catId)
 end
 
 function AnimationHandler:GetCatData(catId)
-	-- Get cat data from service
-	if CatService then
-		return CatService:GetCatState(catId)
+	-- Get cat data from parent controller
+	local CatController = script.Parent.Parent.Parent
+	if CatController and CatController.CatVisuals then
+		return CatController.CatVisuals[catId]
 	end
 	return nil
 end
@@ -227,10 +228,6 @@ end
 
 -- Component initialization
 function AnimationHandler.Init()
-	-- Get reference to parent CatController
-	local CatController = script.Parent.Parent.Parent
-	CatService = CatController.CatService
-	
 	print("AnimationHandler component initialized")
 end
 

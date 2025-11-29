@@ -301,10 +301,6 @@ end
 
 -- Component initialization
 function MoodVisualizer.Init()
-	-- Get reference to parent CatController
-	local CatController = script.Parent.Parent.Parent
-	CatService = CatController.CatService
-	
 	print("MoodVisualizer component initialized")
 end
 

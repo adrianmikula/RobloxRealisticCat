@@ -63,9 +63,4 @@ return function()
 		end)
 		
 	end)
-	
-	-- Return the test function
-	return function()
-		-- This will be called by TestEZ
-	end
 end

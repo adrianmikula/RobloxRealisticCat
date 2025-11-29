@@ -97,7 +97,8 @@ function InputHandler:SelectTool(toolType)
 end
 
 function InputHandler:UnequipTool()
-	CatService:UnequipTool()
+	local CatController = script.Parent.Parent.Parent
+	CatController:UnequipTool()
 	InputHandler.CurrentTool = "none"
 	InputHandler:ShowNotification("Tool unequipped")
 end
@@ -162,7 +163,8 @@ function InputHandler:PerformInteraction(player, catId, interactionType)
 	}
 	
 	-- Send interaction to server
-	CatService:InteractWithCat(catId, interactionType, interactionData)
+	local CatController = script.Parent.Parent.Parent
+	CatController:InteractWithCat(catId, interactionType, interactionData)
 		:andThen(function(result)
 			if result.success then
 				InputHandler:ShowInteractionSuccess(interactionType, catId)
@@ -358,10 +360,6 @@ end
 
 -- Component initialization
 function InputHandler.Init()
-	-- Get reference to parent CatController
-	local CatController = script.Parent.Parent.Parent
-	CatService = CatController.CatService
-	
 	print("InputHandler component initialized")
 end
 

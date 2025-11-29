@@ -5,7 +5,8 @@ local CatService
 
 -- Cat interaction methods
 function module:InteractWithCat(catId, interactionType, interactionData)
-	if not CatService then
+	local CatController = script.Parent.Parent.Parent
+	if not CatController.CatService then
 		return {success = false, message = "CatService not available"}
 	end
 	
@@ -15,11 +16,12 @@ function module:InteractWithCat(catId, interactionType, interactionData)
 	end
 	
 	-- Send interaction to server
-	return CatService:InteractWithCat(catId, interactionType, interactionData)
+	return CatController.CatService:InteractWithCat(catId, interactionType, interactionData)
 end
 
 function module:EquipTool(toolType)
-	if not CatService then
+	local CatController = script.Parent.Parent.Parent
+	if not CatController.CatService then
 		return {success = false, message = "CatService not available"}
 	end
 	
@@ -38,15 +40,16 @@ function module:EquipTool(toolType)
 	end
 	
 	-- Equip tool through service
-	return CatService:EquipTool(toolType)
+	return CatController.CatService:EquipTool(toolType)
 end
 
 function module:UnequipTool()
-	if not CatService then
+	local CatController = script.Parent.Parent.Parent
+	if not CatController.CatService then
 		return {success = false, message = "CatService not available"}
 	end
 	
-	return CatService:UnequipTool()
+	return CatController.CatService:UnequipTool()
 end
 
 -- Cat rendering and visual methods
@@ -283,10 +286,6 @@ function module.Start()
 end
 
 function module.Init()
-	-- Get reference to CatService
-	local CatController = script.Parent.Parent.Parent
-	CatService = CatController.CatService
-	
 	print("CatController Set() component initialized")
 end
 

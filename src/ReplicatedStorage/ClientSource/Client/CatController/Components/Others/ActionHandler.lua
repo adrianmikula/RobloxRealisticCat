@@ -331,8 +331,10 @@ function ActionHandler:GetCatVisual(catId)
 end
 
 function ActionHandler:GetCatData(catId)
-	if CatService then
-		return CatService:GetCatState(catId)
+	-- Get cat data from parent controller
+	local CatController = script.Parent.Parent.Parent
+	if CatController and CatController.CatVisuals then
+		return CatController.CatVisuals[catId]
 	end
 	return nil
 end
@@ -361,10 +363,6 @@ end
 
 -- Component initialization
 function ActionHandler.Init()
-	-- Get reference to parent CatController
-	local CatController = script.Parent.Parent.Parent
-	CatService = CatController.CatService
-	
 	print("ActionHandler component initialized")
 end
 
