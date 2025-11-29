@@ -47,6 +47,7 @@ function CatAI:UpdateCat(catId, catData)
 	end
 	
 	-- Execute current action
+	print("🐱 [CatAI Debug] Executing action for cat:", catId, "Action:", catData.currentAction)
 	CatAI:ExecuteCurrentAction(catId, catData)
 end
 
@@ -113,27 +114,65 @@ function CatAI:CalculateDecisionWeights(catId, catData)
 		Explore = 0.5,
 		SeekFood = 0.0,
 		SeekRest = 0.0,
-		Play = 0.0,
+		Play = 0.5,  -- Changed from 0.0 to 0.5 to ensure positive weight
 		Socialize = 0.0,
 		Groom = 0.3
 	}
 	
-	-- Mood-based weights
-	local moodEffects = CatProfileData.GetMoodEffects(catData.moodState.currentMood)
-	weights.Explore *= (1 + moodEffects.explorationBoost or 0)
-	weights.Play *= (1 + moodEffects.playfulnessBoost or 0)
+	-- Mood-based weights with comprehensive debugging
+	print("🐱 [CatAI Debug] Cat:", catData.id, "Current Mood:", catData.moodState.currentMood)
+	print("🐱 [CatAI Debug] Cat:", catData.id, "Mood State Type:", type(catData.moodState.currentMood))
 	
-	-- Physical state weights
-	if catData.physicalState.hunger > 70 then
-		weights.SeekFood = 3.0 + (catData.physicalState.hunger - 70) * 0.1
-	elseif catData.physicalState.hunger > 50 then
-		weights.SeekFood = 1.0
+	local moodEffects = CatProfileData.GetMoodEffects(catData.moodState.currentMood)
+	print("🐱 [CatAI Debug] Cat:", catData.id, "Mood Effects:", moodEffects)
+	print("🐱 [CatAI Debug] Cat:", catData.id, "Mood Effects Type:", type(moodEffects))
+	
+	if moodEffects then
+		print("🐱 [CatAI Debug] Cat:", catData.id, "Exploration Boost:", moodEffects.explorationBoost)
+		print("🐱 [CatAI Debug] Cat:", catData.id, "Playfulness Boost:", moodEffects.playfulnessBoost)
+		
+		-- Handle missing mood effect fields safely
+		local explorationBoost = moodEffects.explorationBoost or 0
+		local playfulnessBoost = moodEffects.playfulnessBoost or 0
+		
+		weights.Explore *= (1 + explorationBoost)
+		weights.Play *= (1 + playfulnessBoost)
+		
+		print("🐱 [CatAI Debug] Cat:", catData.id, "Final Explore weight:", weights.Explore)
+		print("🐱 [CatAI Debug] Cat:", catData.id, "Final Play weight:", weights.Play)
+	else
+		print("❌ [CatAI Debug] Cat:", catData.id, "No mood effects returned!")
+		weights.Explore *= 1
+		weights.Play *= 1
 	end
 	
-	if catData.physicalState.energy < 30 then
-		weights.SeekRest = 4.0 + (30 - catData.physicalState.energy) * 0.1
-	elseif catData.physicalState.energy < 50 then
+	-- Physical state weights with debug logging
+	local hunger = catData.physicalState.hunger or 50
+	print("🐱 [CatAI Debug] Cat:", catData.id, "Hunger:", hunger, "Type:", type(hunger))
+	
+	if hunger and hunger > 70 then
+		weights.SeekFood = 3.0 + (hunger - 70) * 0.1
+		print("   - High hunger, SeekFood weight:", weights.SeekFood)
+	elseif hunger and hunger > 50 then
+		weights.SeekFood = 1.0
+		print("   - Medium hunger, SeekFood weight:", weights.SeekFood)
+	else
+		weights.SeekFood = 0.5
+		print("   - Low hunger, SeekFood weight:", weights.SeekFood)
+	end
+	
+	local energy = catData.physicalState.energy or 50
+	print("🐱 [CatAI Debug] Cat:", catData.id, "Energy:", energy, "Type:", type(energy))
+	
+	if energy and energy < 30 then
+		weights.SeekRest = 4.0 + (30 - energy) * 0.1
+		print("   - Low energy, SeekRest weight:", weights.SeekRest)
+	elseif energy and energy < 50 then
 		weights.SeekRest = 1.5
+		print("   - Medium energy, SeekRest weight:", weights.SeekRest)
+	else
+		weights.SeekRest = 0.5
+		print("   - High energy, SeekRest weight:", weights.SeekRest)
 	end
 	
 	-- Personality weights
@@ -168,9 +207,15 @@ end
 function CatAI:SetCatAction(catId, actionType)
 	local catData = CatAI.ActiveCats[catId].catData
 	
-	-- Get the parent CatService to call SetComponent
+	-- Get the parent CatService to call SetComponent through Components
 	local CatService = script.Parent.Parent.Parent
-	CatService.SetComponent:SetCatAction(catId, actionType, {})
+	if CatService.Components and CatService.Components.SetComponent then
+		CatService.Components.SetComponent:SetCatAction(catId, actionType, {})
+	else
+		print("❌ [CatAI Debug] SetComponent not available on CatService.Components")
+		-- Fallback: directly update the cat data
+		catData.currentAction = actionType
+	end
 	
 	-- Store action data
 	CatAI.ActiveCats[catId].currentGoal = actionType
@@ -178,23 +223,38 @@ end
 
 function CatAI:ExecuteCurrentAction(catId, catData)
 	local aiData = CatAI.ActiveCats[catId]
-	if not aiData or not aiData.currentGoal then return end
+	if not aiData then
+		print("❌ [CatAI Debug] No AI data for cat:", catId)
+		return
+	end
+	
+	if not aiData.currentGoal then
+		print("❌ [CatAI Debug] No current goal for cat:", catId)
+		return
+	end
 	
 	local action = aiData.currentGoal
+	print("🐱 [CatAI Debug] Executing action for cat:", catId, "Action:", action)
 	
 	-- Simple action execution (will be expanded with pathfinding)
 	if action == "Explore" then
+		print("   -> Executing Explore")
 		CatAI:ExecuteExplore(catId, catData)
 	elseif action == "SeekFood" then
+		print("   -> Executing SeekFood")
 		CatAI:ExecuteSeekFood(catId, catData)
 	elseif action == "SeekRest" then
+		print("   -> Executing SeekRest")
 		CatAI:ExecuteSeekRest(catId, catData)
 	elseif action == "Play" then
+		print("   -> Executing Play")
 		CatAI:ExecutePlay(catId, catData)
 	elseif action == "Groom" then
+		print("   -> Executing Groom")
 		CatAI:ExecuteGroom(catId, catData)
 	else
 		-- Idle or socialize - just wait
+		print("   -> Executing Idle")
 		CatAI:ExecuteIdle(catId, catData)
 	end
 end
@@ -226,13 +286,32 @@ function CatAI:ExecuteExplore(catId, catData)
 		local speed = catData.profile.physical.movementSpeed * 0.1 -- Scale for simulation
 		
 		catData.currentState.position = currentPos + direction * speed
+		print("🐱 [CatAI Debug] Cat", catId, "moving to:", catData.currentState.position, "from:", currentPos)
 		
 		-- Check if reached target
 		if (targetPos - catData.currentState.position).Magnitude < 2 then
 			catData.behaviorState.isMoving = false
 			catData.behaviorState.targetPosition = nil
-			print("Cat", catId, "reached exploration target")
+			print("🐱 [CatAI Debug] Cat", catId, "reached exploration target")
 		end
+	end
+	
+	-- Notify client of position update
+	CatAI:NotifyClientPositionUpdate(catId, catData)
+end
+
+function CatAI:NotifyClientPositionUpdate(catId, catData)
+	-- Get the CatService to notify clients
+	local CatService = script.Parent.Parent.Parent
+	if CatService and CatService.Client then
+		CatService.Client.CatStateUpdate:FireAll(
+			catId,
+			"updated",
+			catData
+		)
+		print("🐱 [CatAI Debug] Notified client of position update for cat:", catId)
+	else
+		print("❌ [CatAI Debug] Could not notify client - CatService or Client signal not found")
 	end
 end
 

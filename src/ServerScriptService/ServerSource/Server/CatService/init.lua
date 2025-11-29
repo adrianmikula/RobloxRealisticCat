@@ -45,15 +45,47 @@ CatService.SetComponent = require(componentsFolder["Set()"])
 
 -- Cat management methods
 function CatService:CreateCat(catId, profileType)
+	print("🔧 [CreateCat] Starting - catId:", catId, "profileType:", profileType)
+	
+	-- Check if CatManager component exists
+	if not CatService.Components.CatManager then
+		print("❌ [CreateCat] ERROR: CatManager component not found in CatService.Components")
+		print("   Available components:", table.concat(table.keys(CatService.Components or {}), ", "))
+		return nil
+	end
+	
+	print("✅ [CreateCat] CatManager component found")
+	
+	-- Create cat data
 	local catData = CatService.Components.CatManager:CreateCat(catId, profileType)
+	
+	if not catData then
+		print("❌ [CreateCat] ERROR: CatManager:CreateCat returned nil")
+		return nil
+	end
+	
+	print("✅ [CreateCat] Cat data created successfully")
+	print("   - catId:", catId)
+	print("   - mood:", catData.moodState and catData.moodState.currentMood or "unknown")
+	print("   - position:", catData.currentState and catData.currentState.position or "unknown")
+	
+	-- Store in active cats
 	CatService.ActiveCats[catId] = catData
+	print("✅ [CreateCat] Added to ActiveCats table")
 	
 	-- Initialize AI behavior
-	CatService.Components.CatAI:InitializeCat(catId, catData)
+	if CatService.Components.CatAI then
+		CatService.Components.CatAI:InitializeCat(catId, catData)
+		print("✅ [CreateCat] AI initialized")
+	else
+		print("⚠️ [CreateCat] WARNING: CatAI component not found")
+	end
 	
 	-- Notify clients
 	CatService.Client.CatStateUpdate:FireAll(catId, "created", catData)
+	print("✅ [CreateCat] Client notification sent")
 	
+	print("🎉 [CreateCat] COMPLETED SUCCESSFULLY - cat:", catId)
 	return catData
 end
 

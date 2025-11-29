@@ -11,40 +11,48 @@ local CatRenderer = {
 	ParticleEffects = {}
 }
 
+function CatRenderer:SpawnCatVisual(catId, catData)
+	return self:CreateCatVisual(catId, catData)
+end
+
 function CatRenderer:CreateCatVisual(catId, catData)
-	-- Create a visual representation of the cat
-	local catVisual = Instance.new("Model")
+	-- Clone the Petra cat model from workspace
+	local petraModel = game.Workspace.Models:FindFirstChild("Petra")
+	if not petraModel then
+		warn("Petra cat model not found in Workspace.Models")
+		return nil
+	end
+	
+	-- Clone the model for this cat
+	local catVisual = petraModel:Clone()
 	catVisual.Name = "Cat_" .. catId
 	
-	-- Create cat body parts (simplified for now)
-	local head = Instance.new("Part")
-	head.Name = "Head"
-	head.Size = Vector3.new(1.2, 1.2, 1.2)
-	head.BrickColor = BrickColor.new("Bright orange")
-	head.Parent = catVisual
-	
-	local body = Instance.new("Part")
-	body.Name = "Body"
-	body.Size = Vector3.new(2, 1.5, 4)
-	body.BrickColor = BrickColor.new("Bright orange")
-	body.Parent = catVisual
-	
-	-- Position body parts
-	local headWeld = Instance.new("Weld")
-	headWeld.Part0 = body
-	headWeld.Part1 = head
-	headWeld.C0 = CFrame.new(0, 1, 2)
-	headWeld.Parent = head
-	
-	-- Add humanoid for animations
-	local humanoid = Instance.new("Humanoid")
-	humanoid.WalkSpeed = catData.profile.physical.movementSpeed
-	humanoid.JumpPower = catData.profile.physical.jumpHeight
-	humanoid.Parent = catVisual
+	-- Configure humanoid for cat behavior
+	local humanoid = catVisual:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.WalkSpeed = catData.profile.physical.movementSpeed
+		humanoid.JumpPower = catData.profile.physical.jumpHeight
+		
+		-- Configure humanoid for cat-like behavior
+		humanoid.AutoRotate = true
+		humanoid.AutoJumpEnabled = false
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		
+		-- Set up animations for cat behaviors
+		self:SetupCatAnimations(catId, humanoid)
+	end
 	
 	-- Position the cat in the world
-	catVisual.PrimaryPart = body
-	catVisual:SetPrimaryPartCFrame(CFrame.new(catData.currentState.position))
+	if catVisual.PrimaryPart then
+		catVisual:SetPrimaryPartCFrame(CFrame.new(catData.currentState.position))
+	else
+		-- Fallback positioning
+		local root = catVisual:FindFirstChild("Root") or catVisual:FindFirstChild("Torso")
+		if root then
+			root.CFrame = CFrame.new(catData.currentState.position)
+		end
+	end
+	
 	catVisual.Parent = workspace
 	
 	-- Store visual reference
@@ -54,7 +62,7 @@ function CatRenderer:CreateCatVisual(catId, catData)
 	-- Create mood indicator
 	CatRenderer:CreateMoodIndicator(catId, catData)
 	
-	print("Created visual for cat:", catId)
+	print("Created visual for cat:", catId, "using Petra model")
 	
 	return catVisual
 end
@@ -79,16 +87,29 @@ function CatRenderer:UpdateCatVisual(catId, catData)
 	local catVisual = CatRenderer.CatVisuals[catId]
 	if not catVisual then return end
 	
-	-- Update position
-	if catVisual.PrimaryPart then
-		catVisual:SetPrimaryPartCFrame(CFrame.new(catData.currentState.position))
-	end
-	
-	-- Update humanoid properties
+	-- Update humanoid properties and movement
 	local humanoid = catVisual:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		humanoid.WalkSpeed = catData.profile.physical.movementSpeed
 		humanoid.JumpPower = catData.profile.physical.jumpHeight
+		
+		-- Make the cat actually move to the target position
+		if catData.behaviorState and catData.behaviorState.isMoving then
+			local currentPos = catVisual.PrimaryPart and catVisual.PrimaryPart.Position or Vector3.new(0, 0, 0)
+			local targetPos = catData.currentState.position
+			
+			-- Only move if we're not already at the target
+			if (targetPos - currentPos).Magnitude > 1 then
+				local direction = (targetPos - currentPos).Unit
+				humanoid:MoveTo(targetPos)
+				print("🐱 [CatRenderer] Cat", catId, "moving to:", targetPos)
+			else
+				humanoid:MoveTo(currentPos) -- Stop moving
+			end
+		else
+			-- Stop moving if not supposed to be moving
+			humanoid:MoveTo(catVisual.PrimaryPart and catVisual.PrimaryPart.Position or Vector3.new(0, 0, 0))
+		end
 	end
 	
 	-- Update stored data
@@ -127,6 +148,13 @@ function CatRenderer:CreateMoodIndicator(catId, catData)
 		if head then
 			moodIndicator.Adornee = head
 			moodIndicator.Parent = head
+		else
+			-- Fallback: attach to torso
+			local torso = catVisual:FindFirstChild("Torso")
+			if torso then
+				moodIndicator.Adornee = torso
+				moodIndicator.Parent = torso
+			end
 		end
 	end
 	
@@ -181,10 +209,13 @@ function CatRenderer:PlayParticleEffect(catId, effectType)
 		particleEffect.Color = ColorSequence.new(Color3.fromRGB(255, 200, 100))
 	end
 	
-	-- Attach to cat's head
+	-- Attach to cat's head or torso
 	local head = catVisual:FindFirstChild("Head")
-	if head then
-		particleEffect.Parent = head
+	local torso = catVisual:FindFirstChild("Torso")
+	local attachTo = head or torso
+	
+	if attachTo then
+		particleEffect.Parent = attachTo
 		
 		-- Auto-destroy after duration
 		task.delay(3, function()
@@ -195,6 +226,33 @@ function CatRenderer:PlayParticleEffect(catId, effectType)
 	end
 	
 	CatRenderer.ParticleEffects[catId] = particleEffect
+end
+
+function CatRenderer:SetupCatAnimations(catId, humanoid)
+	-- Set up animation tracks for various cat behaviors
+	-- These will be played by the AnimationHandler component
+	
+	-- Load default animations (placeholder IDs - replace with actual cat animations)
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		animator = Instance.new("Animator")
+		animator.Parent = humanoid
+	end
+	
+	-- Store animation tracks for later use
+	CatRenderer.AnimationTracks = CatRenderer.AnimationTracks or {}
+	CatRenderer.AnimationTracks[catId] = {
+		Walk = nil,
+		Run = nil,
+		Idle = nil,
+		Sit = nil,
+		Sleep = nil,
+		Play = nil,
+		Eat = nil,
+		Groom = nil
+	}
+	
+	print("Set up animations for cat:", catId)
 end
 
 function CatRenderer:GetCatVisual(catId)

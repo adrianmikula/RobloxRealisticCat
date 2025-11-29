@@ -57,7 +57,7 @@ function module:SpawnCatVisual(catId, catData)
 	local CatController = script.Parent.Parent.Parent
 	local CatRenderer = CatController.Components.CatRenderer
 	if CatRenderer then
-		return CatRenderer:SpawnCatVisual(catId, catData)
+		return CatRenderer:CreateCatVisual(catId, catData)
 	end
 	return false
 end

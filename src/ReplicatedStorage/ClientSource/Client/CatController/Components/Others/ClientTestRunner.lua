@@ -116,7 +116,7 @@ function ClientTestRunner:DefineTestSuite()
                     name = "Component Methods Available",
                     func = function()
                         local componentMethods = {
-                            CatRenderer = {"SpawnCatVisual", "RemoveCatVisual", "UpdateCatVisual", "CullDistantCats"},
+                            CatRenderer = {"CreateCatVisual", "RemoveCatVisual", "UpdateCatVisual", "CullDistantCats"},
                             AnimationHandler = {"PlayAnimation", "StopAnimation"},
                             ActionHandler = {"HandleAction", "StopAction"},
                             ToolManager = {"EquipTool", "UnequipTool"},
@@ -192,7 +192,7 @@ function ClientTestRunner:DefineTestSuite()
                         ClientTestRunner:AssertNotNil(catRenderer.CatModels, "CatModels should exist")
                         
                         -- Test renderer methods
-                        ClientTestRunner:AssertNotNil(catRenderer.SpawnCatVisual, "SpawnCatVisual method should exist")
+                        ClientTestRunner:AssertNotNil(catRenderer.CreateCatVisual, "CreateCatVisual method should exist")
                         ClientTestRunner:AssertNotNil(catRenderer.RemoveCatVisual, "RemoveCatVisual method should exist")
                         ClientTestRunner:AssertNotNil(catRenderer.UpdateCatVisual, "UpdateCatVisual method should exist")
                         

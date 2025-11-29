@@ -33,7 +33,7 @@ local CatService
 
 -- Cat rendering and animation methods
 function CatController:CreateCatVisual(catId, catData)
-	local catVisual = CatController.Components.CatRenderer:SpawnCatVisual(catId, catData)
+	local catVisual = CatController.Components.CatRenderer:CreateCatVisual(catId, catData)
 	CatController.ActiveCatInstances[catId] = catVisual
 	CatController.CatVisuals[catId] = catData
 	

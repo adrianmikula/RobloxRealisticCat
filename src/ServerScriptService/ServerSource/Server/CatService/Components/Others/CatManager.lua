@@ -10,16 +10,38 @@ local CatManager = {
 }
 
 function CatManager:CreateCat(catId, profileType)
+	print("🐱 [CatManager:CreateCat] Starting - catId:", catId, "profileType:", profileType)
+	
+	-- Check if CatProfileData is available
+	if not CatProfileData then
+		print("❌ [CatManager:CreateCat] ERROR: CatProfileData not loaded")
+		return nil
+	end
+	
+	print("✅ [CatManager:CreateCat] CatProfileData available")
+	
 	-- Generate cat ID if not provided
 	if not catId then
 		CatManager.CatCounter += 1
 		catId = "cat_" .. string.format("%03d", CatManager.CatCounter)
+		print("📝 [CatManager:CreateCat] Generated catId:", catId)
 	end
 	
 	-- Create cat profile
+	print("📋 [CatManager:CreateCat] Creating profile for type:", profileType or "Friendly")
 	local catProfile = CatProfileData.CreateProfile(profileType or "Friendly")
 	
+	if not catProfile then
+		print("❌ [CatManager:CreateCat] ERROR: CatProfileData.CreateProfile returned nil")
+		return nil
+	end
+	
+	print("✅ [CatManager:CreateCat] Profile created successfully")
+	print("   - personality:", catProfile.personality)
+	print("   - breed:", catProfile.breed)
+	
 	-- Initialize cat data
+	print("🏗️ [CatManager:CreateCat] Building cat data structure")
 	local catData = {
 		id = catId,
 		profile = catProfile,
@@ -59,11 +81,13 @@ function CatManager:CreateCat(catId, profileType)
 		}
 	}
 	
+	print("✅ [CatManager:CreateCat] Cat data structure built")
+	
 	-- Store cat instance
 	CatManager.CatInstances[catId] = catData
+	print("💾 [CatManager:CreateCat] Stored in CatInstances table")
 	
-	print("Created cat:", catId, "with profile:", profileType)
-	
+	print("🎉 [CatManager:CreateCat] COMPLETED SUCCESSFULLY - cat:", catId)
 	return catData
 end
 
