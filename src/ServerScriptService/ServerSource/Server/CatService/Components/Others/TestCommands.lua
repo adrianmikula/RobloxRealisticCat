@@ -13,7 +13,8 @@ function TestCommands:HandleTestCommand(player, command, args)
         
         for i = 1, count do
             local catId = "test_cmd_" .. player.UserId .. "_" .. i .. "_" .. os.time()
-            local catData = CatService:CreateCat(catId, profileType)
+            local catData = CatService.Components.CatManager:CreateCat(catId, profileType)
+            CatService.ActiveCats[catId] = catData
             
             -- Position near player
             local character = player.Character
@@ -27,8 +28,11 @@ function TestCommands:HandleTestCommand(player, command, args)
         return true
         
     elseif command == "listcats" then
-        local allCats = CatService:GetAllCats()
-        print("📊 Current cats in game:", #allCats)
+        local allCats = CatService.ActiveCats
+        local count = 0
+        for _ in pairs(allCats) do count = count + 1 end
+        
+        print("📊 Current cats in game:", count)
         
         for catId, catData in pairs(allCats) do
             print("   ", catId, "-", catData.moodState.currentMood, "-", catData.currentState.position)
@@ -37,11 +41,11 @@ function TestCommands:HandleTestCommand(player, command, args)
         return true
         
     elseif command == "clearcats" then
-        local allCats = CatService:GetAllCats()
+        local allCats = CatService.ActiveCats
         local count = 0
         
         for catId in pairs(allCats) do
-            CatService:RemoveCat(catId)
+            CatService.ActiveCats[catId] = nil
             count += 1
         end
         
@@ -53,11 +57,27 @@ function TestCommands:HandleTestCommand(player, command, args)
         
         -- Spawn a test cat for AI testing
         local catId = "ai_test_" .. os.time()
-        local catData = CatService:CreateCat(catId, "Curious")
+        local catData = CatService.Components.CatManager:CreateCat(catId, "Curious")
+        CatService.ActiveCats[catId] = catData
         
         print("✅ Created AI test cat:", catId)
         print("   Initial state:", catData.behaviorState.currentAction)
         
+        return true
+    elseif command == "runtests" then
+        -- Forward to CatTestRunner
+        local CatTestRunner = require(script.Parent.CatTestRunner)
+        if CatTestRunner then
+            CatTestRunner:RunAllTests()
+            return true
+        else
+            print("❌ CatTestRunner not available")
+            return false
+        end
+    elseif command == "clienttests" then
+        print("🎮 Client tests should be run from client-side")
+        print("   Type /clienttests in chat to run client tests")
+        print("   Note: Client tests run on the player's device")
         return true
     end
     

@@ -114,6 +114,13 @@ end
 function CatController:GetPlayerTools()
 	if not CatService then return {} end
 	return CatService:GetPlayerTools()
+		:andThen(function(tools)
+			return tools
+		end)
+		:catch(function(err)
+			warn("Failed to get player tools:", err)
+			return {}
+		end)
 end
 
 function CatController:EquipTool(toolType)
@@ -121,11 +128,25 @@ function CatController:EquipTool(toolType)
 		return {success = false, message = "CatService not available"}
 	end
 	return CatService:EquipTool(toolType)
+		:andThen(function(result)
+			return result
+		end)
+		:catch(function(err)
+			warn("Failed to equip tool:", err)
+			return {success = false, message = "Failed to equip tool: " .. tostring(err)}
+		end)
 end
 
 function CatController:GetAllCats()
 	if not CatService then return {} end
 	return CatService:GetAllCats()
+		:andThen(function(cats)
+			return cats
+		end)
+		:catch(function(err)
+			warn("Failed to get all cats:", err)
+			return {}
+		end)
 end
 
 function CatController:CleanupAllTools()

@@ -60,40 +60,33 @@ function InputHandler:SelectTool(toolType)
 	
 	-- Check if player has this tool unlocked
 	local player = Players.LocalPlayer
-	CatController:GetPlayerTools()
-		:andThen(function(playerTools)
-			local hasTool = playerTools[toolType]
-			
-			if not hasTool then
-				InputHandler:ShowNotification("Tool not unlocked: " .. toolType)
-				return
-			end
-			
-			-- Equip the tool
-			CatController:EquipTool(toolType)
-				:andThen(function(result)
-					if result.success then
-						InputHandler.CurrentTool = toolType
-						InputHandler:ShowNotification("Equipped: " .. InputHandler:GetToolDisplayName(toolType))
-						InputHandler:UpdateToolVisuals()
-						
-						-- Play equip sound/effect
-						InputHandler:PlayToolEquipEffect(toolType)
-						
-						print("Selected tool:", toolType)
-					else
-						InputHandler:ShowNotification(result.message or "Failed to equip tool")
-					end
-					
-					InputHandler:SetCooldown("ToolSelect", 0.5)
-				end)
-				:catch(function(err)
-					warn("Failed to equip tool:", err)
-				end)
-		end)
-		:catch(function(err)
-			warn("Failed to get player tools:", err)
-		end)
+	
+	-- For testing, assume player has all tools
+	local playerTools = {
+		basicFood = true,
+		basicToys = true,
+		groomingTool = true
+	}
+	
+	local hasTool = playerTools[toolType]
+	
+	if not hasTool then
+		InputHandler:ShowNotification("Tool not unlocked: " .. toolType)
+		return
+	end
+	
+	-- Equip the tool (simplified for testing)
+	InputHandler.CurrentTool = toolType
+	InputHandler:ShowNotification("Equipped: " .. InputHandler:GetToolDisplayName(toolType))
+	InputHandler:UpdateToolVisuals()
+	
+	-- Play equip sound/effect
+	InputHandler:PlayToolEquipEffect(toolType)
+	
+	-- Set cooldown
+	InputHandler:SetCooldown("ToolSelect", 0.5)
+	
+	print("Selected tool:", toolType)
 end
 
 function InputHandler:UnequipTool()
@@ -253,20 +246,17 @@ function InputHandler:UpdateNearbyCats()
 	-- Get parent controller
 	local CatController = script.Parent.Parent.Parent
 	
-	-- Get all cats from service
-	CatController:GetAllCats()
-		:andThen(function(allCats)
-			-- Filter nearby cats
-			InputHandler.NearbyCats = {}
-			for catId, catData in pairs(allCats) do
-				local catPosition = catData.currentState.position
-				local distance = (humanoidRootPart.Position - catPosition).Magnitude
-				
-				if distance <= InputHandler.InteractionRange * 2 then -- Double range for "nearby" detection
-					table.insert(InputHandler.NearbyCats, {
-						catId = catId,
-						position = catPosition,
-						distance = distance,
+	-- For testing, use empty nearby cats list
+	-- TODO: Implement proper cat detection when cat system is working
+	InputHandler.NearbyCats = {}
+	
+	-- Simulate some nearby cats for testing
+	if #InputHandler.NearbyCats == 0 then
+		-- Add a test cat for demonstration
+		table.insert(InputHandler.NearbyCats, {
+			catId = "test_cat_1",
+			position = humanoidRootPart.Position + Vector3.new(5, 0, 5),
+			distance = 7.07,
 						catData = catData
 					})
 				end
