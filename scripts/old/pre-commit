@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# Pre-commit hook for running tests
+# Copy this to .git/hooks/pre-commit and make it executable
+
+echo "🧪 Running tests before commit..."
+echo "================================="
+
+# Check if Lune is available
+if ! command -v lune &> /dev/null; then
+    echo "❌ Lune not found in PATH"
+    echo "   Install from https://lune.sh"
+    echo "   Or skip tests with: git commit --no-verify"
+    exit 1
+fi
+
+# Run the simple test runner (fastest)
+echo "Running simple tests..."
+if lune run scripts/simple-test-runner.lua; then
+    echo "✅ Simple tests passed"
+else
+    echo "❌ Simple tests failed"
+    echo ""
+    echo "To skip tests: git commit --no-verify"
+    echo "To debug: lune run scripts/debug-test-runner.lua"
+    exit 1
+fi
+
+# Optional: Run full Jest tests for more comprehensive checking
+# Uncomment if you want more thorough testing
+# echo ""
+# echo "Running Jest tests..."
+# if lune run scripts/test-runner.lua; then
+#     echo "✅ Jest tests passed"
+# else
+#     echo "❌ Jest tests failed"
+#     echo ""
+#     echo "To skip tests: git commit --no-verify"
+#     exit 1
+# fi
+
+echo ""
+echo "🎉 All tests passed! Committing..."
+exit 0

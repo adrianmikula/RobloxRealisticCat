@@ -207,12 +207,11 @@ end
 function CatAI:SetCatAction(catId, actionType)
 	local catData = CatAI.ActiveCats[catId].catData
 	
-	-- Get the parent CatService to call SetComponent through Components
-	local CatService = script.Parent.Parent.Parent
-	if CatService.Components and CatService.Components.SetComponent then
-		CatService.Components.SetComponent:SetCatAction(catId, actionType, {})
+	-- Use the CatService reference from initialization
+	if CatAI.CatService and CatAI.CatService.SetComponent then
+		CatAI.CatService.SetComponent:SetCatAction(catId, actionType, {})
 	else
-		print("❌ [CatAI Debug] SetComponent not available on CatService.Components")
+		print("❌ [CatAI Debug] SetComponent not available on CatService")
 		-- Fallback: directly update the cat data
 		catData.currentAction = actionType
 	end
@@ -401,6 +400,9 @@ function CatAI.Init()
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	local sharedDatas = ReplicatedStorage:WaitForChild("SharedSource").Datas
 	CatProfileData = require(sharedDatas.CatProfileData)
+	
+	-- Get reference to parent CatService
+	CatAI.CatService = script.Parent.Parent
 	
 	print("CatAI component initialized")
 end

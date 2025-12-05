@@ -1,0 +1,20 @@
+{
+  "name": "realistic-cat-game",
+  "version": "1.0.0",
+  "description": "Realistic Cat Game with automated testing",
+  "scripts": {
+    "test": "lune run scripts/test-runner.lua",
+    "test:watch": "lune run scripts/test-runner.lua --watch",
+    "test:coverage": "lune run scripts/test-runner.lua --coverage",
+    "test:verbose": "lune run scripts/test-runner.lua --verbose",
+    "rojo:serve": "rojo serve",
+    "rojo:build": "rojo build",
+    "wally:install": "wally install"
+  },
+  "keywords": ["roblox", "game", "testing", "lune", "jest-lua"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@rojo-rbx/rojo": "^7.4.0"
+  }
+}
