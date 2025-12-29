@@ -63,8 +63,27 @@ export interface BehaviorState {
     actionData?: unknown;
 }
 
+export type RelationshipTier = "Strangers" | "Neutral" | "Acquaintances" | "Friends" | "Close Friends" | "Best Friends";
+
+export interface InteractionHistoryItem {
+    type: string;
+    timestamp: number;
+    outcome: "positive" | "negative";
+    effects: Record<string, unknown>;
+}
+
+export interface RelationshipData {
+    trustLevel: number;
+    relationshipScore: number;
+    interactionHistory: InteractionHistoryItem[];
+    lastInteraction: number;
+    firstInteraction: number;
+    favoriteActivities: string[];
+    relationshipTier: RelationshipTier;
+}
+
 export interface SocialState {
-    playerRelationships: Map<number, number>;
+    playerRelationships: Map<number, RelationshipData>;
     catRelationships: Map<string, number>;
     lastInteraction: number;
 }
@@ -107,10 +126,56 @@ export interface MoodEffect {
     energyConsumption?: number;
 }
 
+export interface PlayerSettings {
+    selectedTool: string;
+    autoInteract: boolean;
+    catNotifications: boolean;
+    visualPreferences: {
+        showMoodIndicators: boolean;
+        showRelationshipBars: boolean;
+        animationQuality: string;
+    };
+}
+
+export interface PlayerData {
+    player: Player;
+    currentTool: string;
+    lastInteractionTime: number;
+    nearbyCats: string[];
+    toolCooldowns: Map<string, number>;
+    lastToolChange?: number;
+}
+
+export interface ToolConfig {
+    name: string;
+    type: string;
+    interactionType: string;
+    effectiveness: number;
+    cooldown: number;
+}
+
 export interface InteractionEffect {
     relationshipChange: number;
     moodEffect: MoodType;
     energyCost?: number;
     successChance: number;
     hungerReduction?: number;
+}
+
+export interface AIData {
+    lastDecisionTime: number;
+    currentGoal?: string;
+    memory: Map<string, unknown>;
+    behaviorTree: BehaviorTree;
+}
+
+export interface BehaviorTree {
+    root: string;
+    nodes: Map<string, BTNode>;
+}
+
+export interface BTNode {
+    type: "selector" | "sequence" | "action";
+    children?: string[];
+    action?: string;
 }

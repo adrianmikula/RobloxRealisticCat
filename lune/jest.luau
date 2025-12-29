@@ -458,8 +458,12 @@ end
 
 local originalTest = Jest.test
 _G.test = function(name, fn)
+    -- Capture a copy of the CURRENT hooks to ensure isolation between files
+    local hooks = {}
+    for i, h in ipairs(beforeEachHooks) do hooks[i] = h end
+    
     originalTest(name, function()
-        for _, hook in ipairs(beforeEachHooks) do
+        for _, hook in ipairs(hooks) do
             hook()
         end
         fn()
@@ -509,6 +513,9 @@ local function runSpecsInHierarchy(inst)
         if child.ClassName == "ModuleScript" then 
              if string.match(child.Name, "spec") or string.match(child._sourcePath or "", "spec%.lua") then
                 print("Loading spec: " .. child.Name)
+                -- Clear hooks for the new spec file
+                for k in pairs(beforeEachHooks) do beforeEachHooks[k] = nil end
+                
                 local m = require(child)
                 if type(m) == "function" then
                     m()

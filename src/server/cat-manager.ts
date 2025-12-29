@@ -1,4 +1,4 @@
-import { CatData, CatProfile, MoodType } from "shared/cat-types";
+import { CatData, RelationshipData, MoodType } from "shared/cat-types";
 import { CatProfileData } from "shared/cat-profile-data";
 
 export class CatManager {
@@ -40,7 +40,7 @@ export class CatManager {
                 isInteracting: false,
             },
             socialState: {
-                playerRelationships: new Map<number, number>(),
+                playerRelationships: new Map<number, RelationshipData>(),
                 catRelationships: new Map<string, number>(),
                 lastInteraction: 0,
             },
