@@ -1,0 +1,27 @@
+{
+    "compilerOptions": {
+        "allowSyntheticDefaultImports": true,
+        "downlevelIteration": true,
+        "jsx": "react",
+        "jsxFactory": "Roact.createElement",
+        "jsxFragmentFactory": "Roact.createFragment",
+        "module": "commonjs",
+        "moduleResolution": "Node",
+        "noLib": true,
+        "resolveJsonModule": true,
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        "rootDir": "src",
+        "outDir": "out",
+        "baseUrl": "src",
+        "strict": true,
+        "moduleDetection": "force",
+        "target": "ESNext",
+        "typeRoots": [
+            "node_modules/@rbxts"
+        ]
+    },
+    "include": [
+        "src"
+    ]
+}

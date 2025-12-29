@@ -1,0 +1,86 @@
+local fs = require("@lune/fs")
+local stdio = require("@lune/stdio")
+local process = require("@lune/process")
+local luau = require("@lune/luau")
+
+-- Mock global expect/describe/test logic (super simple TestEz shim)
+local currentSuite = ""
+local failures = 0
+local passes = 0
+
+function _G.describe(name, callback)
+    currentSuite = name
+    print(stdio.color("blue") .. "Suite: " .. name .. stdio.color("reset"))
+    callback()
+end
+
+function _G.test(name, callback)
+    local success, err = pcall(callback)
+    if success then
+        passes = passes + 1
+        print("  " .. stdio.color("green") .. "✔ " .. name .. stdio.color("reset"))
+    else
+        failures = failures + 1
+        print("  " .. stdio.color("red") .. "✘ " .. name .. stdio.color("reset"))
+        print("    " .. tostring(err))
+    end
+end
+
+function _G.expect(val)
+    return {
+        to = {
+            equal = function(expected)
+                if val ~= expected then
+                    error("Expected " .. tostring(expected) .. " but got " .. tostring(val), 2)
+                end
+            end
+        }
+    }
+end
+
+-- Recursive file finder
+local function scanDir(path)
+    for _, child in fs.readDir(path) do
+        local childPath = path .. "/" .. child
+        if fs.isDir(childPath) then
+            scanDir(childPath)
+        elseif string.match(child, "spec%.lua$") then
+            print("Running " .. childPath)
+            
+            local runTest = function()
+                local fileContent = fs.readFile(childPath)
+                local bytecode = luau.compile(fileContent)
+                local chunk, loadErr = luau.load(bytecode, { debugName = childPath })
+                
+                if not chunk then
+                    error("Failed to load chunk: " .. tostring(loadErr))
+                end
+
+                local result = chunk()
+                if type(result) == "function" then
+                    result()
+                end
+            end
+
+            local success, err = pcall(runTest)
+            if not success then
+                print(stdio.color("red") .. "Failed to run " .. childPath .. ": " .. tostring(err) .. stdio.color("reset"))
+                failures = failures + 1
+            end
+        end
+    end
+end 
+
+-- Run
+print("Starting Tests...")
+if fs.isDir("out") then
+    scanDir("out")
+else
+    print("out/ directory not found. Did you build?")
+end
+
+print(string.format("\nResults: %d Passed, %d Failed", passes, failures))
+
+if failures > 0 then
+    process.exit(1)
+end

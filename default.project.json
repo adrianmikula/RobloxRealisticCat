@@ -5,30 +5,33 @@
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "$ignoreUnknownInstances": true,
-      "$path": "src/ReplicatedStorage"
+      "include": {
+        "$path": "include",
+        "node_modules": {
+          "@rbxts": {
+            "$path": "node_modules/@rbxts"
+          }
+        }
+      },
+      "TS": {
+        "$path": "out/shared"
+      }
     },
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "$ignoreUnknownInstances": true,
-      "$path": "src/ServerScriptService"
+      "TS": {
+        "$path": "out/server"
+      }
     },
     "StarterPlayer": {
       "$className": "StarterPlayer",
       "$ignoreUnknownInstances": true,
-      "$path": "src/StarterPlayer"
-    },
-    "Packages": {
-      "$path": "Packages"
-    },
-    "DevPackages": {
-      "$path": "DevPackages"
-    },
-    "Project": {
-      "$path": "src"
-    },
-    "__tests__": {
-      "$path": "src/__tests__",
-      "$ignoreUnknownInstances": true
+      "StarterPlayerScripts": {
+        "TS": {
+          "$path": "out/client"
+        }
+      }
     }
   }
 }

@@ -1,4 +1,9 @@
 src/ReplicatedStorage/Packages/_Index
 src/ReplicatedStorage/Packages/TestEZ
+src_lua/ReplicatedStorage/Packages/_Index
+src_lua/ReplicatedStorage/Packages/TestEZ
 DevPackages/_Index
 Packages/_Index
+node_modules
+example_games
+out
