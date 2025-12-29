@@ -63,7 +63,11 @@ export = () => {
             CatService.SpawnCat(otherPlayer, "Playful");
 
             const allCats = CatService.Client.GetAllCats(mockPlayer);
-            expect(allCats.size()).toBe(2);
+            let count = 0;
+            for (const [_] of pairs(allCats)) {
+                count++;
+            }
+            expect(count).toBe(2);
         });
     });
 };

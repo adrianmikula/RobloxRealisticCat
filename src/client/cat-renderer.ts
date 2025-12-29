@@ -1,5 +1,6 @@
 import { Workspace, Players } from "@rbxts/services";
 import { CatData, MoodState } from "shared/cat-types";
+import { AnimationHandler } from "./animation-handler";
 
 export class CatRenderer {
     private static catVisuals = new Map<string, Model>();
@@ -50,6 +51,7 @@ export class CatRenderer {
     public static RemoveCatVisual(catId: string) {
         const visual = this.catVisuals.get(catId);
         if (visual) {
+            AnimationHandler.StopAnimation(catId);
             visual.Destroy();
             this.catVisuals.delete(catId);
         }
@@ -76,11 +78,14 @@ export class CatRenderer {
 
                 if (targetPos.sub(currentPos).Magnitude > 1) {
                     humanoid.MoveTo(targetPos);
+                    AnimationHandler.PlayAnimation(catId, "Walk", humanoid);
                 } else {
                     humanoid.MoveTo(currentPos);
+                    AnimationHandler.PlayAnimation(catId, "Idle", humanoid);
                 }
             } else {
                 humanoid.MoveTo(visual.PrimaryPart?.Position || new Vector3());
+                AnimationHandler.PlayAnimation(catId, catData.behaviorState.currentAction || "Idle", humanoid);
             }
         }
 

@@ -25,9 +25,9 @@ export const CatController = Knit.CreateController({
         task.spawn(() => {
             task.wait(1);
             const allCats = CatService.GetAllCats();
-            allCats.forEach((catData, catId) => {
+            for (const [catId, catData] of pairs(allCats)) {
                 this.HandleCatStateUpdate(catId as string, "created", catData as CatData);
-            });
+            }
         });
 
         // Performance culling loop

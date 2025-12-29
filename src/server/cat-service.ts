@@ -29,10 +29,10 @@ const CatServiceObj = Knit.CreateService({
             return InteractionHandler.HandleInteraction(player, catId, interactionType, interactionData);
         },
 
-        GetAllCats(player: Player): Map<string, Partial<CatData>> {
-            const safeCats = new Map<string, Partial<CatData>>();
+        GetAllCats(player: Player): Record<string, Partial<CatData>> {
+            const safeCats: Record<string, Partial<CatData>> = {};
             CatManager.GetAllCats().forEach((catData, catId) => {
-                safeCats.set(catId, {
+                safeCats[catId] = {
                     currentState: catData.currentState,
                     moodState: catData.moodState,
                     behaviorState: catData.behaviorState,
@@ -41,7 +41,7 @@ const CatServiceObj = Knit.CreateService({
                         breed: catData.profile.breed,
                         // ... other profile fields if needed
                     } as any,
-                });
+                };
             });
             return safeCats;
         },
@@ -75,11 +75,25 @@ const CatServiceObj = Knit.CreateService({
     },
 
     StartAIUpdates() {
+        let lastSyncTime = 0;
+        const syncInterval = 0.2; // Sync every 0.2s to balance performance and smoothness
+
         while (true) {
-            task.wait(0.1);
+            const dt = task.wait(0.1);
+            const currentTime = os.clock();
+            const shouldSync = currentTime - lastSyncTime >= syncInterval;
+
             CatManager.GetAllCats().forEach((catData, catId) => {
                 CatAI.UpdateCat(catId, catData);
+
+                if (shouldSync) {
+                    this.Client.CatStateUpdate.FireAll(catId, "updated", catData);
+                }
             });
+
+            if (shouldSync) {
+                lastSyncTime = currentTime;
+            }
         }
     },
 
