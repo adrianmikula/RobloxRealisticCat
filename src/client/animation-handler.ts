@@ -55,6 +55,10 @@ export class AnimationHandler {
             SeekFood: "rbxassetid://507767714",
             SeekRest: "rbxassetid://507766388",
             Socialize: "rbxassetid://507766666",
+            Follow: "rbxassetid://507767714",
+            LookAt: "rbxassetid://507766666",
+            Meow: "rbxassetid://507766666",
+            RollOver: "rbxassetid://507766388",
         };
 
         return placeholderMap[state] || placeholderMap.Idle;

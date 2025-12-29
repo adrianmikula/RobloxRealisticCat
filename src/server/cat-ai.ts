@@ -1,7 +1,9 @@
 import { CatData, AIData, BehaviorTree, MoodType } from "shared/cat-types";
 import { CatProfileData } from "shared/cat-profile-data";
 import { CatManager } from "./cat-manager";
-import { Workspace } from "@rbxts/services";
+import { Workspace, Players } from "@rbxts/services";
+import { RelationshipManager } from "./relationship-manager";
+import { RelationshipData } from "shared/cat-types";
 
 export class CatAI {
     /** @internal Testing hook */
@@ -53,6 +55,10 @@ export class CatAI {
     }
 
     public static UpdateCat(catId: string, catData: CatData) {
+        if (catData.behaviorState.heldByPlayerId !== undefined) {
+            return;
+        }
+
         const aiData = this.activeCats.get(catId);
         if (!aiData) return;
 
@@ -135,9 +141,61 @@ export class CatAI {
         weights.set("Idle", 1.0);
         weights.set("Explore", 0.5);
         weights.set("SeekFood", 0.0);
+        const aiData = this.activeCats.get(catId);
+        if (!aiData) return weights;
+
         weights.set("SeekRest", 0.0);
         weights.set("Play", 0.5);
         weights.set("Groom", 0.3);
+        weights.set("Follow", 0.0);
+        weights.set("LookAt", 0.0);
+        weights.set("Meow", 0.1);
+        weights.set("RollOver", 0.0);
+
+        // Find nearest player for social behaviors
+        let nearestPlayer: Player | undefined;
+        let minDistance = 50;
+        const currentPos = catData.currentState.position;
+
+        for (const player of Players.GetPlayers()) {
+            const char = player.Character;
+            const hrp = char?.FindFirstChild("HumanoidRootPart") as Part;
+            if (hrp) {
+                const dist = hrp.Position.sub(currentPos).Magnitude;
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    nearestPlayer = player;
+                }
+            }
+        }
+
+        if (nearestPlayer) {
+            const relationship = RelationshipManager.GetRelationship(nearestPlayer, catId);
+            const trust = relationship.trustLevel;
+
+            // Follow logic
+            if (trust > 0.4 && minDistance > 10) {
+                weights.set("Follow", (trust - 0.4) * 3.0);
+            }
+
+            // LookAt logic
+            if (minDistance < 20) {
+                weights.set("LookAt", 1.0 + trust);
+            }
+
+            // Meow logic (hungry or happy/high trust)
+            if (catData.physicalState.hunger > 60 || trust > 0.7) {
+                weights.set("Meow", 0.5 + (trust * 0.5));
+            }
+
+            // RollOver logic (rare, high trust)
+            if (trust > 0.8 && minDistance < 10) {
+                weights.set("RollOver", 0.3 * (trust - 0.7));
+            }
+
+            // Store nearest player in memory for execution
+            aiData.memory.set("SocialTarget", nearestPlayer.UserId);
+        }
 
         const moodEffects = CatProfileData.GetMoodEffects(catData.moodState.currentMood);
         if (moodEffects) {
@@ -224,6 +282,14 @@ export class CatAI {
             this.ExecutePlay(catId, catData);
         } else if (action === "Groom") {
             this.ExecuteGroom(catId, catData);
+        } else if (action === "Follow") {
+            this.ExecuteFollow(catId, catData);
+        } else if (action === "LookAt") {
+            this.ExecuteLookAt(catId, catData);
+        } else if (action === "Meow") {
+            this.ExecuteMeow(catId, catData);
+        } else if (action === "RollOver") {
+            this.ExecuteRollOver(catId, catData);
         } else {
             this.ExecuteIdle(catId, catData);
         }
@@ -286,6 +352,59 @@ export class CatAI {
 
     private static ExecuteIdle(catId: string, catData: CatData) {
         catData.behaviorState.isMoving = false;
+    }
+
+    private static ExecuteFollow(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const targetUserId = aiData?.memory.get("SocialTarget") as number;
+        const targetPlayer = targetUserId ? Players.GetPlayerByUserId(targetUserId) : undefined;
+        const targetChar = targetPlayer?.Character;
+        const targetHRP = targetChar?.FindFirstChild("HumanoidRootPart") as Part;
+
+        if (targetHRP) {
+            const currentPos = catData.currentState.position;
+            const targetPos = targetHRP.Position;
+            const dist = targetHRP.Position.sub(currentPos).Magnitude;
+
+            if (dist > 8) {
+                catData.behaviorState.targetPosition = targetPos;
+                catData.behaviorState.isMoving = true;
+
+                const diff = targetPos.sub(currentPos);
+                const direction = diff.Unit;
+                const speed = catData.profile.physical.movementSpeed * 0.12;
+                catData.currentState.position = currentPos.add(direction.mul(speed));
+            } else {
+                catData.behaviorState.isMoving = false;
+                this.SetCatAction(catId, "LookAt");
+            }
+        } else {
+            this.SetCatAction(catId, "Idle");
+        }
+    }
+
+    private static ExecuteLookAt(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const targetUserId = aiData?.memory.get("SocialTarget") as number;
+        const targetPlayer = targetUserId ? Players.GetPlayerByUserId(targetUserId) : undefined;
+
+        catData.behaviorState.isMoving = false;
+        if (targetPlayer?.Character?.PrimaryPart) {
+            catData.behaviorState.targetPosition = targetPlayer.Character.PrimaryPart.Position;
+        } else {
+            this.SetCatAction(catId, "Idle");
+        }
+    }
+
+    private static ExecuteMeow(catId: string, catData: CatData) {
+        catData.behaviorState.isMoving = false;
+        // Meow logic will be handled by CatRenderer (sound/visual)
+        // We'll just idle here for now
+    }
+
+    private static ExecuteRollOver(catId: string, catData: CatData) {
+        catData.behaviorState.isMoving = false;
+        // Animation handled by renderer
     }
 
     private static SetupBehaviorTree(catId: string, profileName: string): BehaviorTree {

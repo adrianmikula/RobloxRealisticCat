@@ -65,7 +65,37 @@ export const PERSONALITY_TYPES: Record<string, Partial<CatProfile>> = {
             groomingFrequency: 0.7,
         },
     },
+    Calico: {
+        personality: {
+            friendliness: 0.7,
+            curiosity: 0.9,
+            playfulness: 0.6,
+            aggression: 0.1,
+            independence: 0.4,
+            shyness: 0.2,
+        },
+    },
+    Siamese: {
+        personality: {
+            friendliness: 0.8,
+            curiosity: 0.5,
+            playfulness: 0.9,
+            aggression: 0.2,
+            independence: 0.3,
+            shyness: 0.1,
+        },
+    },
 };
+
+export const CAT_BREEDS = [
+    { name: "Tabby", profileType: "Friendly" },
+    { name: "Black Cat", profileType: "Independent" },
+    { name: "Calico", profileType: "Calico" },
+    { name: "Siamese", profileType: "Siamese" },
+    { name: "Maine Coon", profileType: "Friendly" },
+    { name: "Persian", profileType: "Independent" },
+    { name: "Bengal", profileType: "Siamese" },
+];
 
 export const MOOD_STATES: Record<MoodType, MoodEffect> = {
     Happy: {
@@ -124,6 +154,12 @@ export const INTERACTION_TYPES: Record<string, InteractionEffect> = {
         moodEffect: "Happy",
         hungerReduction: 30,
         successChance: 0.95,
+    },
+    Hold: {
+        relationshipChange: 0.05,
+        moodEffect: "Happy",
+        energyCost: 2,
+        successChance: 0.4, // Harder than petting
     },
 };
 

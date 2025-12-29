@@ -22,6 +22,17 @@ export class InteractionHandler {
         }
 
         const effects = INTERACTION_TYPES[interactionType];
+
+        // Special case: Release if already held by this player
+        if (interactionType === "Hold" && catData.behaviorState.heldByPlayerId === player.UserId) {
+            this.ApplyRelease(catId, catData);
+            return { success: true, message: "Released cat", interactionType: "Hold" };
+        }
+
+        if (catData.behaviorState.heldByPlayerId !== undefined) {
+            return { success: false, message: "Cat is already being held" };
+        }
+
         if (!effects) {
             return { success: false, message: "Invalid interaction type" };
         }
@@ -61,6 +72,8 @@ export class InteractionHandler {
             personalityModifier = personality.friendliness;
         } else if (interactionType === "Play") {
             personalityModifier = personality.playfulness;
+        } else if (interactionType === "Hold") {
+            personalityModifier = (personality.friendliness + (1 - personality.shyness)) / 2;
         }
 
         const successChance = baseChance * relationshipModifier * moodModifier * personalityModifier;
@@ -89,6 +102,11 @@ export class InteractionHandler {
             CatManager.UpdateCatPhysical(catId, { energy: -effects.energyCost });
         }
 
+        if (interactionType === "Hold") {
+            catData.behaviorState.heldByPlayerId = player.UserId;
+            catData.behaviorState.isMoving = false;
+        }
+
         RelationshipManager.AddInteractionToHistory(player, catId, {
             type: interactionType,
             timestamp: os.time(),
@@ -110,6 +128,10 @@ export class InteractionHandler {
             outcome: "negative",
             effects: {},
         });
+    }
+
+    private static ApplyRelease(catId: string, catData: CatData) {
+        catData.behaviorState.heldByPlayerId = undefined;
     }
 
     private static IsOnCooldown(player: Player, catId: string, interactionType: string): boolean {

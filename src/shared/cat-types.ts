@@ -60,6 +60,7 @@ export interface BehaviorState {
     currentPath: Vector3[];
     isMoving: boolean;
     isInteracting: boolean;
+    heldByPlayerId?: number;
     actionData?: unknown;
 }
 

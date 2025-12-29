@@ -72,10 +72,11 @@ export class CatRenderer {
             humanoid.WalkSpeed = catData.profile.physical.movementSpeed;
             humanoid.JumpPower = catData.profile.physical.jumpHeight;
 
-            if (catData.behaviorState.isMoving && catData.behaviorState.targetPosition) {
-                const targetPos = catData.behaviorState.targetPosition;
-                const currentPos = visual.PrimaryPart?.Position || new Vector3();
+            const action = catData.behaviorState.currentAction;
+            const targetPos = catData.behaviorState.targetPosition;
+            const currentPos = visual.PrimaryPart?.Position || new Vector3();
 
+            if (catData.behaviorState.isMoving && targetPos) {
                 if (targetPos.sub(currentPos).Magnitude > 0.5) {
                     humanoid.MoveTo(targetPos);
                     AnimationHandler.PlayAnimation(catId, "Walk", humanoid);
@@ -84,12 +85,60 @@ export class CatRenderer {
                     AnimationHandler.PlayAnimation(catId, "Idle", humanoid);
                 }
             } else {
-                humanoid.MoveTo(visual.PrimaryPart?.Position || new Vector3());
-                AnimationHandler.PlayAnimation(catId, catData.behaviorState.currentAction || "Idle", humanoid);
+                humanoid.MoveTo(currentPos);
+                AnimationHandler.PlayAnimation(catId, action || "Idle", humanoid);
+
+                // Rotation for LookAt/Follow
+                if ((action === "LookAt" || action === "Follow" || action === "Meow" || action === "RollOver") && targetPos) {
+                    const lookVector = targetPos.sub(currentPos).Unit;
+                    const flatLookVector = new Vector3(lookVector.X, 0, lookVector.Z).Unit;
+                    if (flatLookVector.Magnitude > 0) {
+                        visual.SetPrimaryPartCFrame(CFrame.lookAt(currentPos, currentPos.add(flatLookVector)));
+                    }
+                }
+            }
+
+            // Special Meow visual
+            if (action === "Meow") {
+                this.ShowTemporaryMoodText(catId, "Meow!", Color3.fromRGB(255, 255, 255));
             }
         }
 
         this.UpdateMoodIndicator(catId, catData.moodState);
+        this.UpdateHoldingState(catId, visual, catData);
+    }
+
+    private static UpdateHoldingState(catId: string, visual: Model, catData: CatData) {
+        const heldById = catData.behaviorState.heldByPlayerId;
+        const currentWeld = visual.FindFirstChild("HoldingWeld") as Weld;
+
+        if (heldById !== undefined) {
+            const player = Players.GetPlayerByUserId(heldById);
+            const character = player?.Character;
+            const targetPart = character?.FindFirstChild("RightHand") as BasePart
+                || character?.FindFirstChild("Right Arm") as BasePart
+                || character?.FindFirstChild("HumanoidRootPart") as BasePart;
+
+            if (targetPart && !currentWeld) {
+                const weld = new Instance("Weld");
+                weld.Name = "HoldingWeld";
+                weld.Part0 = targetPart;
+                weld.Part1 = visual.PrimaryPart || visual.FindFirstChildOfClass("BasePart");
+                weld.C0 = new CFrame(new Vector3(0, -0.5, -1)); // Position offset
+                weld.Parent = visual;
+
+                const humanoid = visual.FindFirstChildOfClass("Humanoid");
+                if (humanoid) {
+                    humanoid.PlatformStand = true;
+                }
+            }
+        } else if (currentWeld) {
+            currentWeld.Destroy();
+            const humanoid = visual.FindFirstChildOfClass("Humanoid");
+            if (humanoid) {
+                humanoid.PlatformStand = false;
+            }
+        }
     }
 
     private static CreateMoodIndicator(catId: string, catData: CatData) {
@@ -130,9 +179,27 @@ export class CatRenderer {
         if (!indicator) return;
 
         const label = indicator.FindFirstChild("Frame")?.FindFirstChild("TextLabel") as TextLabel;
-        if (label) {
+        if (label && label.GetAttribute("IsTemporary") !== true) {
             label.Text = moodState.currentMood;
             label.TextColor3 = this.GetMoodColor(moodState.currentMood);
+        }
+    }
+
+    private static ShowTemporaryMoodText(catId: string, text: string, color: Color3) {
+        const indicator = this.moodIndicators.get(catId);
+        if (!indicator) return;
+
+        const label = indicator.FindFirstChild("Frame")?.FindFirstChild("TextLabel") as TextLabel;
+        if (label) {
+            label.Text = text;
+            label.TextColor3 = color;
+            label.SetAttribute("IsTemporary", true);
+
+            task.delay(1.5, () => {
+                if (label.Parent) {
+                    label.SetAttribute("IsTemporary", false);
+                }
+            });
         }
     }
 
