@@ -30,6 +30,7 @@
     "typescript": "latest"
   },
   "dependencies": {
+    "@rbxts/knit": "^0.0.21-alpha.0",
     "@rbxts/maid": "latest",
     "@rbxts/services": "latest",
     "@rbxts/signal": "latest",

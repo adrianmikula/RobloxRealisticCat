@@ -44,7 +44,13 @@ local function createEnv()
         task = task,
         -- Framework globals
         _G = _G, -- Crucial for RuntimeLib
+        script = _G.script,
     }
+    
+    if env.script then
+        -- print(string.format("ENV: script=%s parent=%s", tostring(env.script), tostring(env.script.Parent)))
+    end
+
     return setmetatable(env, { __index = _G })
 end
 
@@ -163,9 +169,15 @@ local function createInstance(className, name)
                     Fire = function() end
                 }
             end
+            if k == "Value" then return rawget(t, "_value") end
+            if k == "Parent" then return rawget(t, "Parent") end
             return rawget(instance, k)
         end,
         __newindex = function(t, k, v)
+            if k == "Value" then
+                rawset(t, "_value", v)
+                return
+            end
             if k == "Parent" then
                 -- Use rawget to get the Name string, avoiding metatable lookup
                 local name = rawget(instance, "Name")
@@ -285,18 +297,15 @@ _G.require = function(module)
             local content = fs.readFile(module._sourcePath)
             local bytecode = luau.compile(content)
             local chunk = luau.load(bytecode, { debugName = module.Name })
-            setfenv(chunk, createEnv())
             
-             -- Inject TS runtime for loaded modules
+            -- Inject TS runtime for loaded modules
             if runtimeLib then
                 _G[module] = runtimeLib
-            else
-                 -- If runtimeLib is nil, we might be loading RuntimeLib itself or Promise
-                 -- print("Warning: runtimeLib not available for " .. module.Name)
             end
 
             local oldScript = _G.script
             _G.script = module
+            setfenv(chunk, createEnv())
             local result = chunk()
             _G.script = oldScript
             
@@ -325,6 +334,10 @@ function populateMocks(dir, parentInst)
                  local mod = createInstance("ModuleScript", childName)
                  mod.Parent = parentInst
                  mod._sourcePath = initPath
+                 -- If this is an init file, its Parent should be parentInst, 
+                 -- and its children should also be siblings in the folder?
+                 -- Actually, if we're IN a folder and found init.lua, 
+                 -- the ModuleScript IS the folder in Roblox's eyes.
                  populateMocks(fullPath, mod) 
             else
                 local folder = createInstance("Folder", childName)
@@ -368,7 +381,7 @@ if fs.isDir("node_modules/@rbxts") then
     for _, pkgName in fs.readDir("node_modules/@rbxts") do
         local pkgPath = "node_modules/@rbxts/" .. pkgName
         if fs.isDir(pkgPath) then
-            -- Determine source path (init.lua, init.luau, or out/init.luau)
+            -- Determine source path
             local sourcePath = nil
             if fs.isFile(pkgPath .. "/init.luau") then sourcePath = pkgPath .. "/init.luau"
             elseif fs.isFile(pkgPath .. "/init.lua") then sourcePath = pkgPath .. "/init.lua"
@@ -376,25 +389,36 @@ if fs.isDir("node_modules/@rbxts") then
                 if fs.isFile(pkgPath .. "/out/init.luau") then sourcePath = pkgPath .. "/out/init.luau"
                 elseif fs.isFile(pkgPath .. "/out/init.lua") then sourcePath = pkgPath .. "/out/init.lua"
                 end
+            elseif fs.isDir(pkgPath .. "/" .. pkgName:sub(1, 1):upper() .. pkgName:sub(2)) then
+                -- Handle @rbxts/knit -> Knit/init.lua pattern
+                local nestedDir = pkgPath .. "/" .. pkgName:sub(1,1):upper() .. pkgName:sub(2)
+                if fs.isFile(nestedDir .. "/init.lua") then sourcePath = nestedDir .. "/init.lua"
+                elseif fs.isFile(nestedDir .. "/init.luau") then sourcePath = nestedDir .. "/init.luau"
+                end
             end
 
-            -- Special case for the "jest" package name which we want to map to rbxts-jest
-            local childDir = pkgPath .. "/out"
-            if not fs.isDir(childDir) then childDir = pkgPath end
-
-            if pkgName == "jest" then
-                sourcePath = "node_modules/@rbxts/rbxts-jest/out/init.luau"
-                childDir = "node_modules/@rbxts/rbxts-jest/out"
-            end
-
-            if sourcePath then
-                local mod = createInstance("ModuleScript", pkgName)
+            -- Special case for package name mapping
+            local normalizedName = pkgName:lower()
+            local instName = pkgName
+            
+            if normalizedName == "knit" then
+                -- Use custom mock for Knit to avoid engine dependencies
+                -- Structue: @rbxts/knit (Folder) -> Knit (ModuleScript)
+                local pkgFolder = createInstance("Folder", "knit")
+                pkgFolder.Parent = rbxts
+                
+                local mod = createInstance("ModuleScript", "Knit")
+                mod.Parent = pkgFolder
+                mod._sourcePath = "lune/mocks/KnitMock.luau"
+            elseif sourcePath then
+                local mod = createInstance("ModuleScript", instName)
                 mod.Parent = rbxts
                 mod._sourcePath = sourcePath
                 
-                if pkgName == "jest" then jestFolder = mod end
+                if normalizedName == "jest" or normalizedName == "rbxts-jest" then jestFolder = mod end
 
-                -- Populate children if it has an 'out' or project structure
+                local childDir = pkgPath .. "/out"
+                if not fs.isDir(childDir) then childDir = pkgPath end
                 populateMocks(childDir, mod)
             end
         end

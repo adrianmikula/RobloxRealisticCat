@@ -6,7 +6,12 @@ import { CatData, InteractionEffect } from "shared/cat-types";
 export class InteractionHandler {
     private static interactionCooldowns = new Map<string, number>();
 
-    public static HandleInteraction(player: Player, catId: string, interactionType: string): { success: boolean; message: string; interactionType?: string } {
+    public static HandleInteraction(
+        player: Player,
+        catId: string,
+        interactionType: string,
+        interactionData?: unknown,
+    ): { success: boolean; message: string; interactionType?: string } {
         if (this.IsOnCooldown(player, catId, interactionType)) {
             return { success: false, message: "Interaction on cooldown" };
         }

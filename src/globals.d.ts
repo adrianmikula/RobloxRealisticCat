@@ -12,4 +12,15 @@ declare global {
         toThrow(expected?: string): void;
     };
 }
+
+// Knit type augmentations
+declare global {
+    interface KnitServices {
+        CatService: import("server/cat-service").CatServiceType;
+    }
+    interface KnitControllers {
+        CatController: typeof import("client/cat-controller").CatController;
+    }
+}
+
 export { };
