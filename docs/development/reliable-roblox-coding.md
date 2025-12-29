@@ -35,6 +35,27 @@ declare global {
 ### Effective Networking
 Roblox does **not** support `Map` or `Set` objects across the network. Always convert these to standard Tables (TypeScript `Record<string, T>`) or Arrays before returning them from a `RemoteFunction` or firing a `RemoteSignal`.
 
+### The Knit Service Proxy Context Gotcha
+When defining Knit services in `roblox-ts`, if you call a server-side method from within the `Client` proxy block, you **must** manually preserve the service context (`this`).
+
+**The Problem**: Knit passes the `Player` object as the context to the proxy function. If you call `this.SomeMethod()`, `this` might refer to the Player, not the Service.
+
+```typescript
+// ❌ WRONG: 'this' will be the Player object at runtime
+Client: {
+    SpawnCat(player: Player) {
+        return this.ServerMethod(); // 'this' is Player! Throws error.
+    }
+}
+
+// ✅ CORRECT: Explicitly pass the Service object as the 'self' context
+Client: {
+    SpawnCat(player: Player) {
+        return (CatService as any).SpawnCat(CatService, player);
+    }
+}
+```
+
 ## 3. CLI Unit Testing with Lune & Jest
 
 ### The Mock Environment

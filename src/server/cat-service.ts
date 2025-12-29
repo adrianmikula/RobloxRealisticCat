@@ -18,7 +18,8 @@ const CatServiceObj = Knit.CreateService({
         PlayerInteraction: new RemoteSignal<(catId: string, interactionType: string, result: unknown) => void>(),
 
         SpawnCat(player: Player, profileType: string, position?: Vector3): string {
-            return ((CatServiceObj as unknown) as Record<string, (p: Player, t: string, v?: Vector3) => string>).SpawnCat(
+            return (CatServiceObj as unknown as { SpawnCat: (self: unknown, p: Player, t: string, v?: Vector3) => string }).SpawnCat(
+                CatServiceObj,
                 player,
                 profileType,
                 position,

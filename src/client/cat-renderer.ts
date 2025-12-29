@@ -72,11 +72,11 @@ export class CatRenderer {
             humanoid.WalkSpeed = catData.profile.physical.movementSpeed;
             humanoid.JumpPower = catData.profile.physical.jumpHeight;
 
-            if (catData.behaviorState.isMoving) {
-                const targetPos = catData.currentState.position;
+            if (catData.behaviorState.isMoving && catData.behaviorState.targetPosition) {
+                const targetPos = catData.behaviorState.targetPosition;
                 const currentPos = visual.PrimaryPart?.Position || new Vector3();
 
-                if (targetPos.sub(currentPos).Magnitude > 1) {
+                if (targetPos.sub(currentPos).Magnitude > 0.5) {
                     humanoid.MoveTo(targetPos);
                     AnimationHandler.PlayAnimation(catId, "Walk", humanoid);
                 } else {

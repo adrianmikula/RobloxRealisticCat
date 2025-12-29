@@ -20,7 +20,7 @@ local function createEnv()
         next = next,
         pairs = pairs,
         pcall = pcall,
-        print = print,
+        print = print or function(...) stdio.write(table.concat({...}, " ") .. "\n") end,
         rawequal = rawequal,
         rawget = rawget,
         rawset = rawset,
@@ -57,7 +57,18 @@ end
 local roblox = require("@lune/roblox")
 _G.CFrame = roblox.CFrame
 _G.Vector3 = roblox.Vector3
+-- Improve Vector3 equality for tests
+-- We use a raw metatable approach for the global Vector3 table's'metatable
+pcall(function()
+    local mt = {
+        __eq = function(a, b)
+            return (a - b).Magnitude < 1e-4
+        end
+    }
+    debug.setmetatable(_G.Vector3.new(), mt)
+end)
 _G.Vector2 = roblox.Vector2
+_G.stdio = stdio
 _G.Color3 = roblox.Color3
 _G.UDim2 = roblox.UDim2
 _G.UDim = roblox.UDim
@@ -76,6 +87,18 @@ _G.task = {
 }
 
 local function createInstance(className, name)
+    if className == "RaycastParams" then
+        return {
+            FilterDescendantsInstances = {},
+            FilterType = 0,
+            IgnoreWater = true,
+            new = function() return { FilterDescendantsInstances = {}, FilterType = 0, IgnoreWater = true } end
+        }
+    end
+    _G.RaycastParams = {
+        new = function() return createInstance("RaycastParams") end
+    }
+
     if type(className) ~= "string" then error("createInstance className must be string, got " .. type(className)) end
     if name and type(name) ~= "string" then error("createInstance name must be string, got " .. type(name)) end
     
@@ -100,6 +123,17 @@ local function createInstance(className, name)
         error("WaitForChild(" .. tostring(childName) .. ") failed on " .. tostring(self.Name) .. " (Item not found)")
     end
     
+    instance.Raycast = function(self, origin, direction, params)
+        if self._raycastHook then
+            local result = self._raycastHook(origin, direction, params)
+            if result and result.Position then
+                -- Use _G.Vector3 because local roblox.Vector3 might not be the same one TS uses
+                result.Position = _G.Vector3.new(result.Position.X, result.Position.Y, result.Position.Z)
+            end
+            return result
+        end
+        return nil -- Mock: no hit by default
+    end
     instance.GetChildren = function(self)
         local children = {}
         for _, child in pairs(self._children) do table.insert(children, child) end
@@ -267,6 +301,17 @@ game.GetService = function(self, serviceName)
     return self._children[serviceName]
 end
 
+_G.Enum = {
+    RaycastFilterType = {
+        Include = 0,
+        Exclude = 1,
+    },
+    Material = {
+        Plastic = 0,
+        Neon = 1,
+    }
+}
+_G.Workspace = game:GetService("Workspace")
 _G.game = game
 _G.script = createInstance("Script", "TestRunner")
 _G.Instance = {
