@@ -157,7 +157,12 @@ export class CatAI {
         let minDistance = 50;
         const currentPos = catData.currentState.position;
 
-        for (const player of Players.GetPlayers()) {
+        // Safely get list of players; avoid calling undefined GetPlayers in test env
+        let playerList: Player[] = [];
+        if (typeof (Players as any).GetPlayers === "function") {
+            playerList = Players.GetPlayers();
+        }
+        for (const player of playerList) {
             const char = player.Character;
             const hrp = char?.FindFirstChild("HumanoidRootPart") as Part;
             if (hrp) {
@@ -168,6 +173,7 @@ export class CatAI {
                 }
             }
         }
+
 
         if (nearestPlayer) {
             const relationship = RelationshipManager.GetRelationship(nearestPlayer, catId);
