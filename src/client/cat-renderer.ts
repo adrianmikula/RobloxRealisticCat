@@ -1,6 +1,7 @@
 import { Workspace, Players } from "@rbxts/services";
 import { CatData, MoodState } from "shared/cat-types";
 import { AnimationHandler } from "./animation-handler";
+import { PhysicsService } from "@rbxts/services";
 
 export class CatRenderer {
     private static catVisuals = new Map<string, Model>();
@@ -37,6 +38,15 @@ export class CatRenderer {
             const root = catVisual.FindFirstChild("Root") as BasePart || catVisual.FindFirstChild("Torso") as BasePart;
             if (root) {
                 root.CFrame = new CFrame(catData.currentState.position);
+            }
+        }
+
+        for (const d of catVisual.GetDescendants()) {
+            if (d.IsA("BasePart")) {
+                d.Anchored = false;
+                d.CanCollide = true;
+                d.Massless = false;
+                // PhysicsService.SetPartCollisionGroup(d, "Cats");
             }
         }
 

@@ -114,6 +114,9 @@ const CatServiceObj = Knit.CreateService({
             catData.currentState.position = position;
         }
 
+        catData.currentState.position =
+	        catData.currentState.position.add(new Vector3(0, 2.5, 0));
+
         return catId;
     },
 

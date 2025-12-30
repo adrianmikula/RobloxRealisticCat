@@ -221,7 +221,9 @@ function ActionHandler:MoveCatRandomly(catId, speed)
 	).Unit
 	
 	local newPos = currentPos + randomDirection * speed * 0.1
-	catVisual:SetPrimaryPartCFrame(CFrame.new(newPos))
+	if (root.Anchored) {
+		catVisual:SetPrimaryPartCFrame(CFrame.new(newPos))
+	}
 end
 
 function ActionHandler:MoveCatPurposefully(catId, speed)
@@ -237,7 +239,9 @@ function ActionHandler:MoveCatPurposefully(catId, speed)
 	).Unit
 	
 	local newPos = currentPos + direction * speed * 0.15
-	catVisual:SetPrimaryPartCFrame(CFrame.new(newPos))
+	if (root.Anchored) {
+		catVisual:SetPrimaryPartCFrame(CFrame.new(newPos))
+	}
 end
 
 function ActionHandler:MoveCatPlayfully(catId, speed)
@@ -253,7 +257,9 @@ function ActionHandler:MoveCatPlayfully(catId, speed)
 	).Unit
 	
 	local newPos = currentPos + direction * speed * 0.08
-	catVisual:SetPrimaryPartCFrame(CFrame.new(newPos))
+	if (root.Anchored) {
+		catVisual:SetPrimaryPartCFrame(CFrame.new(newPos))
+	}
 end
 
 function ActionHandler:ScheduleActionCompletion(catId, duration, completionCallback)

@@ -14,7 +14,11 @@ export class CatAI {
             lastDecisionTime: 0,
             currentGoal: undefined,
             memory: new Map<string, unknown>(),
-            behaviorTree: this.SetupBehaviorTree(catId, catData.profile.breed), // Use breed or profile as key
+            behaviorTree: this.SetupBehaviorTree(
+                catId,
+                catData.profile?.breed ?? "Default",
+            ),
+
         };
 
         this.activeCats.set(catId, aiData);
