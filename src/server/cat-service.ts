@@ -37,6 +37,14 @@ const CatServiceObj = Knit.CreateService({
             PlayerManager.RecordToolUsage(player, toolType, toolPosition);
         },
 
+        EquipTool(player: Player, toolType: string): { success: boolean; message: string } {
+            return PlayerManager.EquipTool(player, toolType);
+        },
+
+        UnequipTool(player: Player): void {
+            PlayerManager.UnequipTool(player);
+        },
+
         GetAllCats(player: Player): Record<string, Partial<CatData>> {
             const safeCats: Record<string, Partial<CatData>> = {};
             CatManager.GetAllCats().forEach((catData, catId) => {
@@ -105,9 +113,24 @@ const CatServiceObj = Knit.CreateService({
         }
     },
 
-    CreateCat(catId: string, profileType: string) {
+    CreateCat(catId: string, profileType: string, position?: Vector3) {
         const catData = CatManager.CreateCat(catId, profileType);
         CatAI.InitializeCat(catId, catData);
+
+        // Set position if provided, otherwise use random spawn position
+        if (position) {
+            catData.currentState.position = position;
+        } else {
+            catData.currentState.position = this.GenerateRandomSpawnPosition();
+        }
+
+        // Ground the position
+        catData.currentState.position = CatAI.FindGroundPosition(catData.currentState.position);
+        
+        // If grounding failed (no ground found), add a small Y offset as fallback
+        if (catData.currentState.position.Y === 0) {
+            catData.currentState.position = catData.currentState.position.add(new Vector3(0, 2.5, 0));
+        }
 
         this.Client.CatStateUpdate.FireAll(catId, "created", catData);
         return catData;
@@ -115,16 +138,75 @@ const CatServiceObj = Knit.CreateService({
 
     SpawnCat(player: Player, profileType: string, position?: Vector3) {
         const catId = `player_cat_${player.UserId}_${os.time()}`;
-        const catData = this.CreateCat(catId, profileType || "Friendly");
-
-        if (position) {
-            catData.currentState.position = position;
-        }
-
-        catData.currentState.position =
-	        catData.currentState.position.add(new Vector3(0, 2.5, 0));
+        // CreateCat now handles random positioning if no position is provided
+        const catData = this.CreateCat(catId, profileType || "Friendly", position);
 
         return catId;
+    },
+
+    /**
+     * Generate a random spawn position for cats.
+     * Tries to avoid spawning too close to existing cats or players.
+     */
+    GenerateRandomSpawnPosition(): Vector3 {
+        const Workspace = game.GetService("Workspace");
+        const Players = game.GetService("Players");
+        
+        // Default spawn area (can be configured)
+        const spawnRadius = 50; // Spawn within 50 studs of origin
+        const minDistanceFromOthers = 5; // Minimum distance from other cats/players
+        
+        let attempts = 0;
+        const maxAttempts = 20;
+        
+        while (attempts < maxAttempts) {
+            // Generate random position in a circle
+            const angle = math.random() * math.pi * 2;
+            const distance = math.random() * spawnRadius;
+            const x = math.cos(angle) * distance;
+            const z = math.sin(angle) * distance;
+            const y = 0; // Will be adjusted by FindGroundPosition
+            
+            const candidatePos = new Vector3(x, y, z);
+            
+            // Check if position is too close to existing cats
+            let tooClose = false;
+            CatManager.GetAllCats().forEach((catData) => {
+                const dist = catData.currentState.position.sub(candidatePos).Magnitude;
+                if (dist < minDistanceFromOthers) {
+                    tooClose = true;
+                }
+            });
+            
+            // Check if position is too close to players
+            if (!tooClose) {
+                for (const player of Players.GetPlayers()) {
+                    const char = player.Character;
+                    const hrp = char?.FindFirstChild("HumanoidRootPart") as Part;
+                    if (hrp) {
+                        const dist = hrp.Position.sub(candidatePos).Magnitude;
+                        if (dist < minDistanceFromOthers) {
+                            tooClose = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (!tooClose) {
+                return candidatePos;
+            }
+            
+            attempts++;
+        }
+        
+        // If we couldn't find a good position after max attempts, use a random position anyway
+        // (FindGroundPosition will handle placing it on the ground)
+        const angle = math.random() * math.pi * 2;
+        const distance = math.random() * spawnRadius;
+        const x = math.cos(angle) * distance;
+        const z = math.sin(angle) * distance;
+        return new Vector3(x, 0, z);
     },
 
     RemoveCat(catId: string) {

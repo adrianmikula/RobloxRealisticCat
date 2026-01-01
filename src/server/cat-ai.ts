@@ -40,7 +40,7 @@ export class CatAI {
         this.activeCats.delete(catId);
     }
 
-    private static FindGroundPosition(position: Vector3): Vector3 {
+    public static FindGroundPosition(position: Vector3): Vector3 {
         // Raycast down from high up to find the floor
         const rayOrigin = new Vector3(position.X, 1000, position.Z);
         const rayDirection = new Vector3(0, -2000, 0);
@@ -182,8 +182,38 @@ export class CatAI {
         if (nearestPlayer) {
             const relationship = RelationshipManager.GetRelationship(nearestPlayer, catId);
             const trust = relationship.trustLevel;
-            const currentTool = PlayerManager.GetCurrentTool(nearestPlayer);
-            const toolConfig = currentTool ? PlayerManager.AVAILABLE_TOOLS[currentTool] : undefined;
+            let currentTool = PlayerManager.GetCurrentTool(nearestPlayer);
+            
+            // Fallback: Check for tool directly in player's character if PlayerManager doesn't have it
+            if (!currentTool || currentTool === "none") {
+                const char = nearestPlayer.Character;
+                const tool = char?.FindFirstChildOfClass("Tool");
+                if (tool) {
+                    // Try to determine tool type from name (basic detection)
+                    const toolName = tool.Name;
+                    const toolNameLower = toolName.lower();
+                    
+                    if (toolNameLower.find("food")[0] !== undefined) {
+                        if (toolNameLower.find("premium")[0] !== undefined) {
+                            currentTool = "premiumFood";
+                        } else {
+                            currentTool = "basicFood";
+                        }
+                    } else if (toolNameLower.find("toy")[0] !== undefined) {
+                        if (toolNameLower.find("premium")[0] !== undefined) {
+                            currentTool = "premiumToys";
+                        } else {
+                            currentTool = "basicToys";
+                        }
+                    } else if (toolNameLower.find("groom")[0] !== undefined) {
+                        currentTool = "groomingTools";
+                    } else if (toolNameLower.find("medical")[0] !== undefined) {
+                        currentTool = "medicalItems";
+                    }
+                }
+            }
+            
+            const toolConfig = currentTool && currentTool !== "none" ? PlayerManager.AVAILABLE_TOOLS[currentTool] : undefined;
 
             // Check if player is using a toy (recent usage within 2 seconds)
             const recentToolUsage = PlayerManager.GetRecentToolUsage(nearestPlayer, 2);

@@ -54,6 +54,9 @@ const InteractionController = Knit.CreateController({
 
         // Setup tool usage detection
         this.SetupToolUsageDetection();
+        
+        // Setup tool equip/unequip detection
+        this.SetupToolEquipDetection();
 
         print("InteractionController started");
     },
@@ -95,6 +98,95 @@ const InteractionController = Knit.CreateController({
                 }
             }
         });
+    },
+
+    SetupToolEquipDetection() {
+        const Players = game.GetService("Players");
+        const localPlayer = Players.LocalPlayer;
+        let lastToolCheck: Tool | undefined = undefined;
+        let characterConnection: RBXScriptConnection | undefined = undefined;
+
+        const CatService = Knit.GetService("CatService") as unknown as {
+            EquipTool(toolType: string): { success: boolean; message: string };
+            UnequipTool(): void;
+        };
+
+        // Check for tools and sync to server
+        const checkForTools = () => {
+            const character = localPlayer.Character;
+            if (!character) {
+                // Character is gone, unequip tool
+                if (lastToolCheck) {
+                    CatService.UnequipTool();
+                    lastToolCheck = undefined;
+                }
+                return;
+            }
+
+            const tool = character.FindFirstChildOfClass("Tool");
+            
+            // Tool was equipped
+            if (tool && tool !== lastToolCheck) {
+                const toolType = this.GetToolTypeFromTool(tool);
+                if (toolType) {
+                    CatService.EquipTool(toolType);
+                    lastToolCheck = tool;
+                    
+                    // Also listen for when this tool is removed
+                    tool.AncestryChanged.Connect(() => {
+                        if (!tool.Parent || tool.Parent !== character) {
+                            // Tool was removed
+                            CatService.UnequipTool();
+                            lastToolCheck = undefined;
+                        }
+                    });
+                }
+            }
+            // Tool was unequipped
+            else if (!tool && lastToolCheck) {
+                CatService.UnequipTool();
+                lastToolCheck = undefined;
+            }
+        };
+
+        // Check when character is added
+        localPlayer.CharacterAdded.Connect((character) => {
+            task.wait(0.5); // Wait for character to fully load
+            checkForTools();
+            
+            // Listen for child added/removed to detect tools immediately
+            if (characterConnection) {
+                characterConnection.Disconnect();
+            }
+            
+            characterConnection = character.ChildAdded.Connect((child) => {
+                if (child.IsA("Tool")) {
+                    task.wait(0.1); // Small delay to ensure tool is fully loaded
+                    checkForTools();
+                }
+            });
+            
+            character.ChildRemoved.Connect((child) => {
+                if (child.IsA("Tool") && child === lastToolCheck) {
+                    CatService.UnequipTool();
+                    lastToolCheck = undefined;
+                }
+            });
+        });
+
+        // Check periodically for tool changes (fallback)
+        task.spawn(() => {
+            while (true) {
+                checkForTools();
+                task.wait(1); // Check every second as fallback
+            }
+        });
+        
+        // Initial check
+        if (localPlayer.Character) {
+            task.wait(0.5);
+            checkForTools();
+        }
     },
 
     /**
