@@ -5,13 +5,19 @@ import "./cat-service";
 
 import { PhysicsService } from "@rbxts/services";
 
-Knit.Start()
-    .andThen(() => {
-        print("Knit started on server");
-    })
-    .catch((err) => {
-        warn("Knit failed to start on server:", err);
-    });
-
-pcall(() => PhysicsService.CreateCollisionGroup("Cats"));
+// Start Knit asynchronously to prevent blocking
+task.spawn(() => {
+    Knit.Start()
+        .andThen(() => {
+            print("Knit started on server");
+            
+            // Initialize collision groups asynchronously
+            task.spawn(() => {
+                pcall(() => PhysicsService.CreateCollisionGroup("Cats"));
+            });
+        })
+        .catch((err) => {
+            warn("Knit failed to start on server:", err);
+        });
+});
 PhysicsService.CollisionGroupSetCollidable("Cats", "Cats", false);

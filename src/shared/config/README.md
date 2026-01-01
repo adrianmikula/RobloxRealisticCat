@@ -37,6 +37,18 @@ This folder contains all configurable constants for the game. These files are ea
 - Modify relationship change values
 - Add new interaction types
 
+### `animation-config.ts`
+**Animation Configuration**
+- `ANIMATION_IDS`: Maps cat behaviors to animation asset IDs
+- `DEFAULT_ANIMATION`: Fallback animation if specific animation not found
+- `ANIMATION_PRIORITIES`: Animation priority settings
+
+**To customize:**
+- Replace placeholder animation IDs with your own uploaded animations
+- Add new animation mappings for custom behaviors
+- Adjust animation priorities
+- **Important**: Animations must be owned by the same account/group as your game
+
 ## Usage
 
 ### Importing Config Values
@@ -105,6 +117,19 @@ export const INTERACTION_TYPES: Record<string, InteractionEffect> = {
     // ...
 };
 ```
+
+### Updating Animation IDs
+
+After uploading animations to Roblox, edit `animation-config.ts`:
+```typescript
+export const ANIMATION_IDS: Record<string, string> = {
+    Idle: "rbxassetid://YOUR_IDLE_ANIMATION_ID",
+    Walk: "rbxassetid://YOUR_WALK_ANIMATION_ID",
+    // ... etc
+};
+```
+
+See `docs/development/ANIMATION_UPLOAD_GUIDE.md` for detailed instructions.
 
 ## Best Practices
 

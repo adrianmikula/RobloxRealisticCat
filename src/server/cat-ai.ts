@@ -1,7 +1,7 @@
 import { CatData, AIData, BehaviorTree, MoodType } from "shared/cat-types";
 import { CatProfileData } from "shared/cat-profile-data";
 import { CatManager } from "./cat-manager";
-import { Workspace, Players } from "@rbxts/services";
+import { Workspace, Players, CollectionService } from "@rbxts/services";
 import { RelationshipManager } from "./relationship-manager";
 import { PlayerManager } from "./player-manager";
 import { RelationshipData } from "shared/cat-types";
@@ -161,6 +161,9 @@ export class CatAI {
         weights.set("ApproachFood", 0.0);
         weights.set("CirclePlayer", 0.0);
         weights.set("SitAndMeow", 0.0);
+        weights.set("ApproachCatTree", 0.0);
+        weights.set("ClimbCatTree", 0.0);
+        weights.set("RestOnCatTree", 0.0);
 
         // Find nearest player for social behaviors
         let nearestPlayer: Player | undefined;
@@ -322,6 +325,35 @@ export class CatAI {
             weights.set("SeekRest", 0.5);
         }
 
+        // Cat tree interactions
+        const nearestCatTree = this.FindNearestCatTree(catData.currentState.position);
+        if (nearestCatTree) {
+            const treeDistance = nearestCatTree.Position.sub(catData.currentState.position).Magnitude;
+            const curiosity = catData.profile.personality.curiosity;
+            const independence = catData.profile.personality.independence;
+            
+            // Approach cat tree if within exploration range
+            if (treeDistance < catData.profile.behavior.explorationRange && treeDistance > 5) {
+                const approachWeight = 2.0 + (curiosity * 2.0) + (independence * 1.5);
+                weights.set("ApproachCatTree", approachWeight);
+                aiData.memory.set("CatTreeTarget", nearestCatTree);
+            }
+            
+            // Climb cat tree if close enough
+            if (treeDistance < 8 && treeDistance > 2) {
+                const climbWeight = 3.0 + (curiosity * 2.5) + (independence * 2.0);
+                weights.set("ClimbCatTree", climbWeight);
+                aiData.memory.set("CatTreeTarget", nearestCatTree);
+            }
+            
+            // Rest on cat tree if already on it or very close
+            if (treeDistance < 3) {
+                const restWeight = (energy < 50 ? 5.0 : 2.0) + (independence * 1.5);
+                weights.set("RestOnCatTree", restWeight);
+                aiData.memory.set("CatTreeTarget", nearestCatTree);
+            }
+        }
+
         // Personality modifiers
         weights.set("Explore", weights.get("Explore")! * catData.profile.personality.curiosity);
         weights.set("Play", weights.get("Play")! * catData.profile.personality.playfulness);
@@ -398,6 +430,12 @@ export class CatAI {
             this.ExecuteCirclePlayer(catId, catData);
         } else if (action === "SitAndMeow") {
             this.ExecuteSitAndMeow(catId, catData);
+        } else if (action === "ApproachCatTree") {
+            this.ExecuteApproachCatTree(catId, catData);
+        } else if (action === "ClimbCatTree") {
+            this.ExecuteClimbCatTree(catId, catData);
+        } else if (action === "RestOnCatTree") {
+            this.ExecuteRestOnCatTree(catId, catData);
         } else {
             this.ExecuteIdle(catId, catData);
         }
@@ -658,6 +696,209 @@ export class CatAI {
             }
         } else {
             this.SetCatAction(catId, "Idle");
+        }
+    }
+
+    /**
+     * Find the nearest cat tree in the workspace.
+     * Cat trees are objects tagged with "CatTree" using CollectionService.
+     */
+    private static FindNearestCatTree(catPosition: Vector3): BasePart | undefined {
+        // Safely get tagged cat trees (may not be available in test environment)
+        let catTrees: Instance[] = [];
+        const [success, result] = pcall(() => {
+            return CollectionService.GetTagged("CatTree");
+        });
+        if (success && typeIs(result, "table")) {
+            catTrees = result as Instance[];
+        } else {
+            // In test environment or if CollectionService is not available, return undefined
+            return undefined;
+        }
+        
+        let nearestTree: BasePart | undefined;
+        let minDistance = math.huge;
+
+        for (const instance of catTrees) {
+            // Cat trees should be Models or BaseParts
+            let treePart: BasePart | undefined;
+            
+            if (instance.IsA("Model")) {
+                // Try to find a primary part or the largest part
+                treePart = instance.PrimaryPart as BasePart;
+                if (!treePart) {
+                    // Find the highest part (usually the top platform)
+                    let highestY = -math.huge;
+                    for (const child of instance.GetDescendants()) {
+                        if (child.IsA("BasePart")) {
+                            const part = child as BasePart;
+                            if (part.Position.Y > highestY) {
+                                highestY = part.Position.Y;
+                                treePart = part;
+                            }
+                        }
+                    }
+                }
+            } else if (instance.IsA("BasePart")) {
+                treePart = instance as BasePart;
+            }
+
+            if (treePart) {
+                const distance = treePart.Position.sub(catPosition).Magnitude;
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestTree = treePart;
+                }
+            }
+        }
+
+        return nearestTree;
+    }
+
+    /**
+     * Find the top platform of a cat tree (highest part).
+     */
+    private static FindCatTreeTop(catTree: BasePart): Vector3 {
+        // If it's a Model, find the highest part
+        const model = catTree.Parent as Model;
+        if (model && model.IsA("Model")) {
+            let highestY = -math.huge;
+            let topPart: BasePart | undefined;
+            
+            for (const child of model.GetDescendants()) {
+                if (child.IsA("BasePart")) {
+                    const part = child as BasePart;
+                    if (part.Position.Y > highestY) {
+                        highestY = part.Position.Y;
+                        topPart = part;
+                    }
+                }
+            }
+            
+            if (topPart) {
+                return topPart.Position.add(new Vector3(0, 1, 0)); // Offset above the platform
+            }
+        }
+        
+        // Fallback: use the part's position with offset
+        return catTree.Position.add(new Vector3(0, catTree.Size.Y / 2 + 1, 0));
+    }
+
+    /**
+     * Execute approach cat tree behavior.
+     */
+    private static ExecuteApproachCatTree(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const catTree = aiData?.memory.get("CatTreeTarget") as BasePart | undefined;
+        
+        if (!catTree) {
+            this.SetCatAction(catId, "Idle");
+            return;
+        }
+
+        const currentPos = catData.currentState.position;
+        const targetPos = catTree.Position;
+        const distance = targetPos.sub(currentPos).Magnitude;
+
+        // Approach the base of the cat tree
+        if (distance > 3) {
+            catData.behaviorState.targetPosition = targetPos;
+            catData.behaviorState.isMoving = true;
+
+            const diff = targetPos.sub(currentPos);
+            const direction = diff.Unit;
+            const speed = catData.profile.physical.movementSpeed * 0.1;
+            catData.currentState.position = currentPos.add(direction.mul(speed));
+        } else {
+            // Close enough, transition to climbing
+            catData.behaviorState.isMoving = false;
+            this.SetCatAction(catId, "ClimbCatTree");
+        }
+    }
+
+    /**
+     * Execute climb cat tree behavior.
+     */
+    private static ExecuteClimbCatTree(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const catTree = aiData?.memory.get("CatTreeTarget") as BasePart | undefined;
+        
+        if (!catTree) {
+            this.SetCatAction(catId, "Idle");
+            return;
+        }
+
+        const currentPos = catData.currentState.position;
+        const treeTop = this.FindCatTreeTop(catTree);
+        const distance = treeTop.sub(currentPos).Magnitude;
+        const heightDiff = treeTop.Y - currentPos.Y;
+
+        // If we're close to the top (within 2 studs horizontally and on the platform)
+        if (distance < 2 && heightDiff < 1) {
+            // Successfully climbed, now rest
+            catData.currentState.position = treeTop;
+            catData.behaviorState.isMoving = false;
+            this.SetCatAction(catId, "RestOnCatTree");
+        } else {
+            // Move towards the top of the tree
+            catData.behaviorState.targetPosition = treeTop;
+            catData.behaviorState.isMoving = true;
+
+            const diff = treeTop.sub(currentPos);
+            const direction = diff.Unit;
+            const speed = catData.profile.physical.movementSpeed * 0.08; // Slower for climbing
+            catData.currentState.position = currentPos.add(direction.mul(speed));
+            
+            // Consume energy while climbing
+            catData.physicalState.energy = math.max(0, catData.physicalState.energy - 0.5);
+        }
+    }
+
+    /**
+     * Execute rest on cat tree behavior.
+     */
+    private static ExecuteRestOnCatTree(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const catTree = aiData?.memory.get("CatTreeTarget") as BasePart | undefined;
+        
+        if (!catTree) {
+            this.SetCatAction(catId, "Idle");
+            return;
+        }
+
+        const currentPos = catData.currentState.position;
+        const treeTop = this.FindCatTreeTop(catTree);
+        const distance = treeTop.sub(currentPos).Magnitude;
+
+        // Stay on the tree
+        catData.behaviorState.isMoving = false;
+        
+        // If we've drifted too far, move back to the top
+        if (distance > 1) {
+            catData.currentState.position = treeTop;
+        }
+
+        // Restore energy while resting on tree
+        catData.physicalState.energy = math.min(100, catData.physicalState.energy + 2);
+        
+        // Rest for a while, then decide to do something else
+        const restTime = aiData?.memory.get("RestStartTime") as number || 0;
+        const currentTime = os.time();
+        
+        if (restTime === 0) {
+            aiData?.memory.set("RestStartTime", currentTime);
+        } else if (currentTime - restTime > 10) {
+            // Rested for 10 seconds, maybe explore or do something else
+            aiData?.memory.delete("RestStartTime");
+            aiData?.memory.delete("CatTreeTarget");
+            
+            // If energy is high, explore. Otherwise, continue resting if still low energy
+            if (catData.physicalState.energy > 70) {
+                this.SetCatAction(catId, "Explore");
+            } else {
+                // Continue resting
+                aiData?.memory.set("RestStartTime", currentTime);
+            }
         }
     }
 

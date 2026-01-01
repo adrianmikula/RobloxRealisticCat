@@ -2,6 +2,7 @@ import { KnitClient as Knit } from "@rbxts/knit";
 import { Players, RunService } from "@rbxts/services";
 import { CatData } from "shared/cat-types";
 import { CatRenderer } from "./cat-renderer";
+import { LoadingScreen } from "./loading-screen";
 
 // Define the service type for Knit
 import type { CatService } from "server/cat-service";
@@ -21,12 +22,36 @@ export const CatController = Knit.CreateController({
             this.HandleCatStateUpdate(catId, updateType, catData);
         });
 
-        // Initialize existing cats
+        // Initialize existing cats asynchronously with progress updates
         task.spawn(() => {
-            task.wait(1);
+            task.wait(0.5); // Small delay to ensure service is ready
+            
+            LoadingScreen.SetProgress(0.6, "Loading cats...");
+            
             const allCats = CatService.GetAllCats();
+            const catArray: Array<[string, CatData]> = [];
+            
+            // Convert map to array for progress tracking
             for (const [catId, catData] of pairs(allCats)) {
-                this.HandleCatStateUpdate(catId as string, "created", catData as CatData);
+                catArray.push([catId as string, catData as CatData]);
+            }
+            
+            // Load cats with progress updates
+            const totalCats = catArray.size();
+            if (totalCats > 0) {
+                for (let i = 0; i < totalCats; i++) {
+                    const [catId, catData] = catArray[i];
+                    this.HandleCatStateUpdate(catId, "created", catData);
+                    
+                    // Update progress (0.6 to 0.8 for cat loading)
+                    const catProgress = 0.6 + (0.2 * (i + 1) / totalCats);
+                    LoadingScreen.SetProgress(catProgress, `Loading cat ${i + 1}/${totalCats}...`);
+                    
+                    // Small delay between cats to prevent blocking
+                    task.wait(0.05);
+                }
+            } else {
+                LoadingScreen.SetProgress(0.8, "No cats to load");
             }
         });
 

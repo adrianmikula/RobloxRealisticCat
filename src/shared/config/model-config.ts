@@ -20,6 +20,8 @@ export const MODEL_MAPPING: Record<string, string> = {
     "Independent": "GreyStripes",     // Independent cat model
     "Calico": "Jerald",           // Calico cat model
     "Siamese": "Siamese",          // Siamese cat model
+    "Tabby": "MinecraftCat",          // Siamese cat model
+    "Persian": "Olia",          // Siamese cat model
     // Add more mappings as you add models:
     // "Playful": "PlayfulCatModel",
     // "Curious": "CuriousCatModel",

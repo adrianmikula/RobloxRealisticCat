@@ -72,6 +72,12 @@ export class CatRenderer {
             humanoid.AutoRotate = true;
             humanoid.AutoJumpEnabled = false;
             humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None;
+            
+            // Enable animations
+            humanoid.UseJumpPower = true;
+            
+            // Play idle animation immediately
+            AnimationHandler.PlayAnimation(catId, "Idle", humanoid);
         }
 
         if (catVisual.PrimaryPart) {
