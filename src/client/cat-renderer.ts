@@ -6,6 +6,7 @@ import { PhysicsService } from "@rbxts/services";
 export class CatRenderer {
     private static catVisuals = new Map<string, Model>();
     private static moodIndicators = new Map<string, BillboardGui>();
+    private static previousActions = new Map<string, string>();
 
     public static CreateCatVisual(catId: string, catData: CatData): Model | undefined {
         const modelsFolder = Workspace.FindFirstChild("Models");
@@ -62,6 +63,10 @@ export class CatRenderer {
         const visual = this.catVisuals.get(catId);
         if (visual) {
             AnimationHandler.StopAnimation(catId);
+            
+            // Stop purring sound if playing
+            this.StopPurringSound(catId);
+            
             visual.Destroy();
             this.catVisuals.delete(catId);
         }
@@ -71,6 +76,9 @@ export class CatRenderer {
             indicator.Destroy();
             this.moodIndicators.delete(catId);
         }
+
+        // Clean up previous action tracking
+        this.previousActions.delete(catId);
     }
 
     public static UpdateCatVisual(catId: string, catData: CatData) {
@@ -86,6 +94,13 @@ export class CatRenderer {
             const targetPos = catData.behaviorState.targetPosition;
             const currentPos = visual.PrimaryPart?.Position || new Vector3();
 
+            // Stop purring if action changed from Purr to something else
+            const previousAction = this.previousActions.get(catId);
+            if (previousAction === "Purr" && action !== "Purr") {
+                this.StopPurringSound(catId);
+            }
+            this.previousActions.set(catId, action);
+
             if (catData.behaviorState.isMoving && targetPos) {
                 if (targetPos.sub(currentPos).Magnitude > 0.5) {
                     humanoid.MoveTo(targetPos);
@@ -98,12 +113,40 @@ export class CatRenderer {
                 humanoid.MoveTo(currentPos);
                 AnimationHandler.PlayAnimation(catId, action || "Idle", humanoid);
 
-                // Rotation for LookAt/Follow
-                if ((action === "LookAt" || action === "Follow" || action === "Meow" || action === "RollOver") && targetPos) {
-                    const lookVector = targetPos.sub(currentPos).Unit;
-                    const flatLookVector = new Vector3(lookVector.X, 0, lookVector.Z).Unit;
-                    if (flatLookVector.Magnitude > 0) {
-                        visual.SetPrimaryPartCFrame(CFrame.lookAt(currentPos, currentPos.add(flatLookVector)));
+                // Special handling for Purr: look at the player who petted
+                if (action === "Purr") {
+                    const actionData = catData.behaviorState.actionData as { reactingToPlayerId?: number } | undefined;
+                    if (actionData?.reactingToPlayerId) {
+                        const player = Players.GetPlayerByUserId(actionData.reactingToPlayerId);
+                        const char = player?.Character;
+                        const playerHRP = char?.FindFirstChild("HumanoidRootPart") as Part;
+                        if (playerHRP) {
+                            const playerPos = playerHRP.Position;
+                            const lookVector = playerPos.sub(currentPos).Unit;
+                            const flatLookVector = new Vector3(lookVector.X, 0, lookVector.Z).Unit;
+                            if (flatLookVector.Magnitude > 0) {
+                                visual.SetPrimaryPartCFrame(CFrame.lookAt(currentPos, currentPos.add(flatLookVector)));
+                            }
+                            // Play purring sound effect
+                            this.PlayPurringSound(catId, visual);
+                        }
+                    } else if (targetPos) {
+                        // Fallback to targetPos if no player data
+                        const lookVector = targetPos.sub(currentPos).Unit;
+                        const flatLookVector = new Vector3(lookVector.X, 0, lookVector.Z).Unit;
+                        if (flatLookVector.Magnitude > 0) {
+                            visual.SetPrimaryPartCFrame(CFrame.lookAt(currentPos, currentPos.add(flatLookVector)));
+                        }
+                        this.PlayPurringSound(catId, visual);
+                    }
+                } else {
+                    // Rotation for LookAt/Follow/Meow/RollOver
+                    if ((action === "LookAt" || action === "Follow" || action === "Meow" || action === "RollOver") && targetPos) {
+                        const lookVector = targetPos.sub(currentPos).Unit;
+                        const flatLookVector = new Vector3(lookVector.X, 0, lookVector.Z).Unit;
+                        if (flatLookVector.Magnitude > 0) {
+                            visual.SetPrimaryPartCFrame(CFrame.lookAt(currentPos, currentPos.add(flatLookVector)));
+                        }
                     }
                 }
             }
@@ -111,6 +154,11 @@ export class CatRenderer {
             // Special Meow visual
             if (action === "Meow") {
                 this.ShowTemporaryMoodText(catId, "Meow!", Color3.fromRGB(255, 255, 255));
+            }
+
+            // Special Purr visual
+            if (action === "Purr") {
+                this.ShowTemporaryMoodText(catId, "Purr...", Color3.fromRGB(255, 200, 255));
             }
         }
 
@@ -224,6 +272,47 @@ export class CatRenderer {
             Playful: Color3.fromRGB(255, 193, 7),
         };
         return colors[moodType] || Color3.fromRGB(189, 189, 189);
+    }
+
+    private static purringSounds = new Map<string, Sound>();
+
+    private static StopPurringSound(catId: string) {
+        const sound = this.purringSounds.get(catId);
+        if (sound && sound.Parent) {
+            sound.Stop();
+        }
+        this.purringSounds.delete(catId);
+    }
+
+    private static PlayPurringSound(catId: string, visual: Model) {
+        // Only play sound if not already playing
+        if (this.purringSounds.has(catId)) return;
+
+        const head = visual.FindFirstChild("Head") as BasePart || visual.PrimaryPart;
+        if (!head) return;
+
+        // Check if sound already exists
+        let sound = head.FindFirstChild("PurringSound") as Sound;
+        if (!sound) {
+            sound = new Instance("Sound");
+            sound.Name = "PurringSound";
+            // Using a placeholder sound ID - replace with actual purring sound asset ID
+            // You can find cat purring sounds in the Roblox library or upload your own
+            sound.SoundId = "rbxassetid://131961136"; // Placeholder: replace with actual cat purr sound
+            sound.Volume = 0.4;
+            sound.Looped = true;
+            sound.Parent = head;
+        }
+
+        if (!sound.IsPlaying) {
+            sound.Play();
+            this.purringSounds.set(catId, sound);
+
+            // Stop sound after 3 seconds (when purr action ends)
+            task.delay(3, () => {
+                this.StopPurringSound(catId);
+            });
+        }
     }
 
     public static CullDistantCats(playerPosition: Vector3) {

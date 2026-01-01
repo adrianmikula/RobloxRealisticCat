@@ -1,5 +1,5 @@
 import { KnitClient as Knit } from "@rbxts/knit";
-import { Players, Workspace } from "@rbxts/services";
+import { CollectionService, Players, Workspace } from "@rbxts/services";
 import { CatData } from "shared/cat-types";
 
 interface CatPrompts {
@@ -87,8 +87,8 @@ const InteractionController = Knit.CreateController({
                 // For now, we'll check if there's a tool in the character
                 const tool = character.FindFirstChildOfClass("Tool");
                 if (tool) {
-                    // Determine tool type from tool name or use a mapping
-                    const toolType = this.GetToolTypeFromName(tool.Name);
+                    // Determine tool type from tag (preferred) or name (fallback)
+                    const toolType = this.GetToolTypeFromTool(tool);
                     if (toolType) {
                         CatService.UseTool(toolType, hrp.Position);
                     }
@@ -97,6 +97,70 @@ const InteractionController = Knit.CreateController({
         });
     },
 
+    /**
+     * Get tool type from a Tool instance.
+     * First checks CollectionService tags, then falls back to name-based detection.
+     * 
+     * Supported tags:
+     * - "CatTool_BasicFood", "CatTool_PremiumFood" → food tools
+     * - "CatTool_BasicToy", "CatTool_PremiumToy" → toy tools
+     * - "CatTool_GroomingTool" → grooming tools
+     * - "CatTool_MedicalItem" → medical items
+     * 
+     * Or name the tool: "BasicToy", "PremiumToy", "BasicFood", "PremiumFood", "GroomingTool", "MedicalItem"
+     */
+    GetToolTypeFromTool(tool: Tool): string | undefined {
+        // First, check for CollectionService tags (preferred method)
+        const tags = CollectionService.GetTags(tool);
+        for (const tag of tags) {
+            // Check for CatTool_* tags (tags start with "CatTool_")
+            const findResult = tag.find("CatTool_");
+            if (findResult[0] === 1) {
+                // Extract the tool type name after "CatTool_" (9 characters)
+                const toolTypeName = tag.sub(9);
+                const toolType = this.MapToolTypeNameToId(toolTypeName);
+                if (toolType) {
+                    return toolType;
+                }
+            }
+        }
+
+        // Fallback to name-based detection
+        return this.GetToolTypeFromName(tool.Name);
+    },
+
+    /**
+     * Map tool type names (from tags or names) to internal tool type IDs
+     */
+    MapToolTypeNameToId(toolTypeName: string): string | undefined {
+        const mapping: Record<string, string> = {
+            "BasicToy": "basicToys",
+            "PremiumToy": "premiumToys",
+            "BasicFood": "basicFood",
+            "PremiumFood": "premiumFood",
+            "GroomingTool": "groomingTools",
+            "MedicalItem": "medicalItems",
+        };
+
+        // Try exact match first
+        if (mapping[toolTypeName]) {
+            return mapping[toolTypeName];
+        }
+
+        // Try case-insensitive match
+        const lowerName = toolTypeName.lower();
+        for (const [key, value] of pairs(mapping)) {
+            if (lowerName === key.lower()) {
+                return value;
+            }
+        }
+
+        return undefined;
+    },
+
+    /**
+     * Get tool type from tool name (legacy method, maintained for backward compatibility)
+     */
     GetToolTypeFromName(toolName: string): string | undefined {
         // Map tool names to tool types
         const toolMapping: Record<string, string> = {

@@ -21,6 +21,112 @@ export = () => {
             expect(result.interactionType).to.equal("Pet");
         });
 
+        test("Pet interaction triggers purr reaction", () => {
+            // Set up cat for high success chance
+            const catData = CatManager.GetCat(catId);
+            if (catData) {
+                catData.profile.personality.friendliness = 0.9;
+                catData.moodState.currentMood = "Happy";
+            }
+
+            // Create a mock player character for position tracking
+            const mockHRP = {
+                Position: new Vector3(0, 0, 0),
+            } as Part;
+
+            const mockCharacter = {
+                FindFirstChild: (name: string) => {
+                    if (name === "HumanoidRootPart") {
+                        return mockHRP;
+                    }
+                    return undefined;
+                },
+            } as unknown as Model;
+
+            // Mock the player's character
+            (mockPlayer as any).Character = mockCharacter;
+
+            // Retry until we get a successful pet interaction
+            let result;
+            for (let i = 0; i < 10; i++) {
+                result = InteractionHandler.HandleInteraction(mockPlayer, catId, "Pet");
+                if (result.success) break;
+                task.wait(2.1); // Wait for cooldown
+            }
+
+            expect(result).toBeDefined();
+            if (result && result.success) {
+                const updatedCatData = CatManager.GetCat(catId);
+                expect(updatedCatData).toBeDefined();
+                if (updatedCatData) {
+                    // Cat should be in Purr action state
+                    expect(updatedCatData.behaviorState.currentAction).toBe("Purr");
+                    
+                    // Cat should not be moving when purring
+                    expect(updatedCatData.behaviorState.isMoving).toBe(false);
+                    
+                    // ActionData should contain the player's UserId
+                    const actionData = updatedCatData.behaviorState.actionData as { reactingToPlayerId?: number } | undefined;
+                    expect(actionData).toBeDefined();
+                    if (actionData) {
+                        expect(actionData.reactingToPlayerId).toBe(mockPlayer.UserId);
+                    }
+                    
+                    // Target position should be set (player's position)
+                    expect(updatedCatData.behaviorState.targetPosition).toBeDefined();
+                }
+            }
+        });
+
+        test("Purr reaction resets to Idle after timeout", () => {
+            // Set up cat for high success chance
+            const catData = CatManager.GetCat(catId);
+            if (catData) {
+                catData.profile.personality.friendliness = 0.9;
+                catData.moodState.currentMood = "Happy";
+            }
+
+            // Create a mock player character
+            const mockHRP = {
+                Position: new Vector3(0, 0, 0),
+            } as Part;
+
+            const mockCharacter = {
+                FindFirstChild: (name: string) => {
+                    if (name === "HumanoidRootPart") {
+                        return mockHRP;
+                    }
+                    return undefined;
+                },
+            } as unknown as Model;
+
+            (mockPlayer as any).Character = mockCharacter;
+
+            // Get a successful pet interaction
+            let result;
+            for (let i = 0; i < 10; i++) {
+                result = InteractionHandler.HandleInteraction(mockPlayer, catId, "Pet");
+                if (result.success) break;
+                task.wait(2.1);
+            }
+
+            if (result && result.success) {
+                // Verify cat is purring
+                let updatedCatData = CatManager.GetCat(catId);
+                expect(updatedCatData?.behaviorState.currentAction).toBe("Purr");
+
+                // Wait for the timeout (3 seconds + small buffer)
+                task.wait(3.2);
+
+                // Verify cat has returned to Idle
+                updatedCatData = CatManager.GetCat(catId);
+                if (updatedCatData) {
+                    expect(updatedCatData.behaviorState.currentAction).toBe("Idle");
+                    expect(updatedCatData.behaviorState.actionData).toBeUndefined();
+                }
+            }
+        });
+
         test("Cooldown check", () => {
             InteractionHandler.HandleInteraction(mockPlayer, catId, "Pet");
             const result = InteractionHandler.HandleInteraction(mockPlayer, catId, "Pet");

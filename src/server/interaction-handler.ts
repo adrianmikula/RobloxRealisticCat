@@ -107,6 +107,27 @@ export class InteractionHandler {
             catData.behaviorState.isMoving = false;
         }
 
+        // Special reaction for Pet interaction: cat looks at player and purrs
+        if (interactionType === "Pet") {
+            const char = player.Character;
+            const hrp = char?.FindFirstChild("HumanoidRootPart") as Part;
+            if (hrp) {
+                catData.behaviorState.currentAction = "Purr";
+                catData.behaviorState.targetPosition = hrp.Position;
+                catData.behaviorState.isMoving = false;
+                catData.behaviorState.actionData = { reactingToPlayerId: player.UserId };
+                
+                // Reset to idle after 3 seconds
+                task.delay(3, () => {
+                    const updatedCatData = CatManager.GetCat(catId);
+                    if (updatedCatData && updatedCatData.behaviorState.currentAction === "Purr") {
+                        updatedCatData.behaviorState.currentAction = "Idle";
+                        updatedCatData.behaviorState.actionData = undefined;
+                    }
+                });
+            }
+        }
+
         RelationshipManager.AddInteractionToHistory(player, catId, {
             type: interactionType,
             timestamp: os.time(),

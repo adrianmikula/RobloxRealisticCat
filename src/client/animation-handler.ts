@@ -59,6 +59,7 @@ export class AnimationHandler {
             LookAt: "rbxassetid://507766666",
             Meow: "rbxassetid://507766666",
             RollOver: "rbxassetid://507766388",
+            Purr: "rbxassetid://507766666", // Use idle animation for purring (vibrating effect can be added via sound)
         };
 
         return placeholderMap[state] || placeholderMap.Idle;
