@@ -10,6 +10,11 @@ declare global {
         };
         toBe(expected: unknown): void;
         toThrow(expected?: string): void;
+        toBeLessThan(expected: number): void;
+        toBeGreaterThan(expected: number): void;
+        toBeGreaterThanOrEqual(expected: number): void;
+        toBeUndefined(): void;
+        toBeDefined(): void;
     };
 }
 

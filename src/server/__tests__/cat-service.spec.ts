@@ -37,9 +37,12 @@ export = () => {
             const returnedCatId = CatService.SpawnCat(mockPlayer, "Playful", targetPos);
 
             const catData = CatManager.GetCat(returnedCatId);
+            expect(catData).toBeDefined();
             if (catData) {
+                // SpawnCat adds 2.5 to Y position (for grounding offset)
+                const expectedY = targetPos.Y + 2.5;
                 expect(catData.currentState.position.X).toBe(targetPos.X);
-                expect(catData.currentState.position.Y).toBe(targetPos.Y);
+                expect(catData.currentState.position.Y).toBe(expectedY);
                 expect(catData.currentState.position.Z).toBe(targetPos.Z);
             }
         });

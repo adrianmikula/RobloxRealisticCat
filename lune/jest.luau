@@ -292,6 +292,76 @@ game.GetService = function(self, serviceName)
         end
         return self._children["HttpService"]
     end
+    
+    if serviceName == "Players" then
+        if not self._children["Players"] then
+            local playersService = createInstance("Players")
+            local playersList = {} -- Track players by UserId
+            local playersArray = {} -- Array for GetPlayers()
+            
+            -- Mock PlayerAdded and PlayerRemoving events
+            local playerAddedListeners = {}
+            local playerRemovingListeners = {}
+            
+            playersService.PlayerAdded = {
+                Connect = function(_, cb)
+                    table.insert(playerAddedListeners, cb)
+                    return { Disconnect = function() end }
+                end
+            }
+            
+            playersService.PlayerRemoving = {
+                Connect = function(_, cb)
+                    table.insert(playerRemovingListeners, cb)
+                    return { Disconnect = function() end }
+                end
+            }
+            
+            -- GetPlayers() returns array of all players
+            -- Use rawset to ensure method is directly on the table, bypassing metatable
+            rawset(playersService, "GetPlayers", function(self)
+                return playersArray
+            end)
+            
+            -- GetPlayerByUserId(userId) finds player by UserId
+            rawset(playersService, "GetPlayerByUserId", function(self, userId)
+                return playersList[userId]
+            end)
+            
+            -- Helper to add a player (called by PlayerManager or tests)
+            rawset(playersService, "_addPlayer", function(self, player)
+                if player and player.UserId and not playersList[player.UserId] then
+                    playersList[player.UserId] = player
+                    table.insert(playersArray, player)
+                    -- Fire PlayerAdded event
+                    for _, listener in ipairs(playerAddedListeners) do
+                        pcall(listener, player)
+                    end
+                end
+            end)
+            
+            -- Helper to remove a player
+            rawset(playersService, "_removePlayer", function(self, player)
+                if playersList[player.UserId] then
+                    playersList[player.UserId] = nil
+                    for i, p in ipairs(playersArray) do
+                        if p.UserId == player.UserId then
+                            table.remove(playersArray, i)
+                            break
+                        end
+                    end
+                    -- Fire PlayerRemoving event
+                    for _, listener in ipairs(playerRemovingListeners) do
+                        pcall(listener, player)
+                    end
+                end
+            end)
+            
+            playersService.Parent = self
+            self._children["Players"] = playersService
+        end
+        return self._children["Players"]
+    end
 
     if not self._children[serviceName] then
         local service = createInstance(serviceName)
@@ -353,6 +423,50 @@ _G.require = function(module)
             setfenv(chunk, createEnv())
             local result = chunk()
             _G.script = oldScript
+            
+            -- Hook PlayerManager to auto-register players with Players service
+            -- Check if this is the player-manager module
+            if string.match(module._sourcePath or "", "player%-manager") then
+                if result and type(result) == "table" then
+                    -- Check for PlayerManager class export (result.PlayerManager)
+                    if result.PlayerManager and type(result.PlayerManager) == "table" then
+                        local playerManager = result.PlayerManager
+                        if playerManager.HandlePlayerAdded then
+                            local originalHandlePlayerAdded = playerManager.HandlePlayerAdded
+                            playerManager.HandlePlayerAdded = function(self, player)
+                                originalHandlePlayerAdded(self, player)
+                                -- Also register with Players service mock
+                                local playersService = game:GetService("Players")
+                                if playersService and playersService._addPlayer then
+                                    playersService._addPlayer(player)
+                                end
+                            end
+                        end
+                    -- Check if result itself is PlayerManager class (direct export)
+                    elseif result.HandlePlayerAdded then
+                        local originalHandlePlayerAdded = result.HandlePlayerAdded
+                        result.HandlePlayerAdded = function(self, player)
+                            originalHandlePlayerAdded(self, player)
+                            -- Also register with Players service mock
+                            local playersService = game:GetService("Players")
+                            if playersService and playersService._addPlayer then
+                                playersService._addPlayer(player)
+                            end
+                        end
+                        -- Also check __index for class methods
+                        if result.__index and result.__index.HandlePlayerAdded then
+                            local originalHandlePlayerAdded = result.__index.HandlePlayerAdded
+                            result.__index.HandlePlayerAdded = function(self, player)
+                                originalHandlePlayerAdded(self, player)
+                                local playersService = game:GetService("Players")
+                                if playersService and playersService._addPlayer then
+                                    playersService._addPlayer(player)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
             
             loadedModules[module._sourcePath] = result
             return result
@@ -506,6 +620,14 @@ if not runtimeLib then
 end
 print("RuntimeLib loaded successfully")
 
+-- Add global helper to register players with Players service for tests
+_G.registerTestPlayer = function(player)
+    local playersService = game:GetService("Players")
+    if playersService and playersService._addPlayer then
+        playersService._addPlayer(player)
+    end
+end
+
 
 -- =============================================================================
 -- 5. Run Tests (rbxts-jest)
@@ -551,6 +673,46 @@ _G.expect = function(val)
             ret.toBe(nil, other) 
         end
     }
+    
+    -- Add missing matchers that tests need
+    ret.toBeLessThan = function(selfStub, expected)
+        if type(val) ~= "number" or type(expected) ~= "number" then
+            error(string.format("toBeLessThan: Expected numbers, got %s and %s", type(val), type(expected)), 2)
+        end
+        if val >= expected then
+            error(string.format("Expected %s to be less than %s", tostring(val), tostring(expected)), 2)
+        end
+    end
+    
+    ret.toBeGreaterThan = function(selfStub, expected)
+        if type(val) ~= "number" or type(expected) ~= "number" then
+            error(string.format("toBeGreaterThan: Expected numbers, got %s and %s", type(val), type(expected)), 2)
+        end
+        if val <= expected then
+            error(string.format("Expected %s to be greater than %s", tostring(val), tostring(expected)), 2)
+        end
+    end
+    
+    ret.toBeGreaterThanOrEqual = function(selfStub, expected)
+        if type(val) ~= "number" or type(expected) ~= "number" then
+            error(string.format("toBeGreaterThanOrEqual: Expected numbers, got %s and %s", type(val), type(expected)), 2)
+        end
+        if val < expected then
+            error(string.format("Expected %s to be greater than or equal to %s", tostring(val), tostring(expected)), 2)
+        end
+    end
+    
+    ret.toBeUndefined = function(selfStub)
+        if val ~= nil then
+            error(string.format("Expected %s to be undefined (nil)", tostring(val)), 2)
+        end
+    end
+    
+    ret.toBeDefined = function(selfStub)
+        if val == nil then
+            error("Expected value to be defined (not nil)", 2)
+        end
+    end
     
     -- Also handle .to.be.equal if needed? TestEz has to.be.equal / to.equal
     -- For now just .to.equal based on compiled output `to:equal(3)`

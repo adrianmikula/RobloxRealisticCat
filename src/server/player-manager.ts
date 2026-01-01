@@ -179,4 +179,35 @@ export class PlayerManager {
         this.activePlayers.forEach((data) => players.push(data.player));
         return players;
     }
+
+    // Track when players use tools (for cat AI reactions)
+    private static toolUsageEvents = new Map<number, { toolType: string; timestamp: number; position?: Vector3 }>();
+
+    public static RecordToolUsage(player: Player, toolType: string, position?: Vector3) {
+        this.toolUsageEvents.set(player.UserId, {
+            toolType,
+            timestamp: os.time(),
+            position,
+        });
+    }
+
+    public static GetRecentToolUsage(player: Player, withinSeconds = 2): { toolType: string; timestamp: number; position?: Vector3 } | undefined {
+        const usage = this.toolUsageEvents.get(player.UserId);
+        if (!usage) return undefined;
+
+        const timeSinceUsage = os.time() - usage.timestamp;
+        if (timeSinceUsage <= withinSeconds) {
+            return usage;
+        }
+
+        return undefined;
+    }
+
+    public static IsToolType(player: Player, toolType: string): boolean {
+        const currentTool = this.GetCurrentTool(player);
+        if (!currentTool) return false;
+
+        const toolConfig = this.AVAILABLE_TOOLS[currentTool];
+        return toolConfig?.type === toolType;
+    }
 }

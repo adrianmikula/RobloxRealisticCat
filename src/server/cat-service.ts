@@ -30,6 +30,13 @@ const CatServiceObj = Knit.CreateService({
             return InteractionHandler.HandleInteraction(player, catId, interactionType, interactionData);
         },
 
+        UseTool(player: Player, toolType: string, position?: Vector3): void {
+            const char = player.Character;
+            const hrp = char?.FindFirstChild("HumanoidRootPart") as Part;
+            const toolPosition = position || hrp?.Position;
+            PlayerManager.RecordToolUsage(player, toolType, toolPosition);
+        },
+
         GetAllCats(player: Player): Record<string, Partial<CatData>> {
             const safeCats: Record<string, Partial<CatData>> = {};
             CatManager.GetAllCats().forEach((catData, catId) => {

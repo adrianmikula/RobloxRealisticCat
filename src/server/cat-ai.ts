@@ -3,6 +3,7 @@ import { CatProfileData } from "shared/cat-profile-data";
 import { CatManager } from "./cat-manager";
 import { Workspace, Players } from "@rbxts/services";
 import { RelationshipManager } from "./relationship-manager";
+import { PlayerManager } from "./player-manager";
 import { RelationshipData } from "shared/cat-types";
 
 export class CatAI {
@@ -155,6 +156,11 @@ export class CatAI {
         weights.set("LookAt", 0.0);
         weights.set("Meow", 0.1);
         weights.set("RollOver", 0.0);
+        weights.set("LookAtToy", 0.0);
+        weights.set("PlayWithToy", 0.0);
+        weights.set("ApproachFood", 0.0);
+        weights.set("CirclePlayer", 0.0);
+        weights.set("SitAndMeow", 0.0);
 
         // Find nearest player for social behaviors
         let nearestPlayer: Player | undefined;
@@ -176,14 +182,72 @@ export class CatAI {
         if (nearestPlayer) {
             const relationship = RelationshipManager.GetRelationship(nearestPlayer, catId);
             const trust = relationship.trustLevel;
+            const currentTool = PlayerManager.GetCurrentTool(nearestPlayer);
+            const toolConfig = currentTool ? PlayerManager.AVAILABLE_TOOLS[currentTool] : undefined;
+
+            // Check if player is using a toy (recent usage within 2 seconds)
+            const recentToolUsage = PlayerManager.GetRecentToolUsage(nearestPlayer, 2);
+            const isUsingToy = recentToolUsage && toolConfig?.type === "toy";
+
+            // Check if player is holding a toy
+            if (currentTool && toolConfig?.type === "toy" && minDistance < 25) {
+                // Cat looks at player with toy
+                weights.set("LookAtToy", 2.0 + (trust * 1.5) + (catData.profile.personality.playfulness * 2.0));
+                aiData.memory.set("SocialTarget", nearestPlayer.UserId);
+                aiData.memory.set("PlayerTool", currentTool);
+            }
+
+            // Check if player just used a toy (within 2 seconds)
+            if (isUsingToy && minDistance < 20) {
+                // Check if player is facing the cat
+                const char = nearestPlayer.Character;
+                const hrp = char?.FindFirstChild("HumanoidRootPart") as Part;
+                if (hrp) {
+                    const playerPos = hrp.Position;
+                    const toCat = currentPos.sub(playerPos);
+                    const playerLookDirection = hrp.CFrame.LookVector;
+                    const dotProduct = toCat.Unit.Dot(playerLookDirection);
+                    
+                    // If player is facing cat (dot product > 0.5 means within ~60 degrees)
+                    if (dotProduct > 0.5) {
+                        // Cat plays with toy - high priority for playful cats
+                        const playfulness = catData.profile.personality.playfulness;
+                        weights.set("PlayWithToy", 5.0 + (playfulness * 4.0) + (trust * 2.0));
+                        aiData.memory.set("SocialTarget", nearestPlayer.UserId);
+                        aiData.memory.set("PlayerTool", recentToolUsage.toolType);
+                    }
+                }
+            }
+
+            // Check if player is holding food
+            if (currentTool && toolConfig?.type === "food" && minDistance < 30) {
+                // Cat approaches food - higher priority if hungry
+                const hungerWeight = catData.physicalState.hunger > 50 ? 3.0 : 1.0;
+                weights.set("ApproachFood", hungerWeight + (trust * 1.0));
+                aiData.memory.set("SocialTarget", nearestPlayer.UserId);
+                aiData.memory.set("PlayerTool", currentTool);
+            }
+
+            // If cat is near player with food (within 8 studs)
+            if (currentTool && toolConfig?.type === "food" && minDistance < 8) {
+                // Cat circles player or sits and meows
+                const playfulness = catData.profile.personality.playfulness;
+                if (playfulness > 0.5) {
+                    weights.set("CirclePlayer", 2.0 + (playfulness * 1.5));
+                } else {
+                    weights.set("SitAndMeow", 2.0 + (catData.physicalState.hunger / 50));
+                }
+                aiData.memory.set("SocialTarget", nearestPlayer.UserId);
+                aiData.memory.set("PlayerTool", currentTool);
+            }
 
             // Follow logic
-            if (trust > 0.4 && minDistance > 10) {
+            if (trust > 0.4 && minDistance > 10 && !currentTool) {
                 weights.set("Follow", (trust - 0.4) * 3.0);
             }
 
-            // LookAt logic
-            if (minDistance < 20) {
+            // LookAt logic (only if no special tool behaviors)
+            if (minDistance < 20 && !currentTool) {
                 weights.set("LookAt", 1.0 + trust);
             }
 
@@ -193,7 +257,7 @@ export class CatAI {
             }
 
             // RollOver logic (rare, high trust)
-            if (trust > 0.8 && minDistance < 10) {
+            if (trust > 0.8 && minDistance < 10 && !currentTool) {
                 weights.set("RollOver", 0.3 * (trust - 0.7));
             }
 
@@ -292,8 +356,18 @@ export class CatAI {
             this.ExecuteLookAt(catId, catData);
         } else if (action === "Meow") {
             this.ExecuteMeow(catId, catData);
-        } else if (action === "RollOver") {
+        } else         if (action === "RollOver") {
             this.ExecuteRollOver(catId, catData);
+        } else if (action === "LookAtToy") {
+            this.ExecuteLookAtToy(catId, catData);
+        } else if (action === "PlayWithToy") {
+            this.ExecutePlayWithToy(catId, catData);
+        } else if (action === "ApproachFood") {
+            this.ExecuteApproachFood(catId, catData);
+        } else if (action === "CirclePlayer") {
+            this.ExecuteCirclePlayer(catId, catData);
+        } else if (action === "SitAndMeow") {
+            this.ExecuteSitAndMeow(catId, catData);
         } else {
             this.ExecuteIdle(catId, catData);
         }
@@ -409,6 +483,174 @@ export class CatAI {
     private static ExecuteRollOver(catId: string, catData: CatData) {
         catData.behaviorState.isMoving = false;
         // Animation handled by renderer
+    }
+
+    private static ExecuteLookAtToy(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const targetUserId = aiData?.memory.get("SocialTarget") as number;
+        const targetPlayer = targetUserId ? Players.GetPlayerByUserId(targetUserId) : undefined;
+
+        catData.behaviorState.isMoving = false;
+        if (targetPlayer?.Character?.PrimaryPart) {
+            catData.behaviorState.targetPosition = targetPlayer.Character.PrimaryPart.Position;
+        } else {
+            this.SetCatAction(catId, "Idle");
+        }
+    }
+
+    private static ExecutePlayWithToy(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const targetUserId = aiData?.memory.get("SocialTarget") as number;
+        const targetPlayer = targetUserId ? Players.GetPlayerByUserId(targetUserId) : undefined;
+        const targetChar = targetPlayer?.Character;
+        const targetHRP = targetChar?.FindFirstChild("HumanoidRootPart") as Part;
+
+        if (targetHRP) {
+            const currentPos = catData.currentState.position;
+            const targetPos = targetHRP.Position;
+            const dist = targetPos.sub(currentPos).Magnitude;
+
+            // Playful behavior: run around, jump, roll
+            // Alternate between different play actions
+            const playAction = aiData?.memory.get("PlayAction") as number || 0;
+            
+            if (playAction === 0 || playAction === undefined) {
+                // Run towards player
+                if (dist > 5) {
+                    catData.behaviorState.targetPosition = targetPos;
+                    catData.behaviorState.isMoving = true;
+                    const diff = targetPos.sub(currentPos);
+                    const direction = diff.Unit;
+                    const speed = catData.profile.physical.movementSpeed * 0.15; // Faster when playing
+                    catData.currentState.position = currentPos.add(direction.mul(speed));
+                } else {
+                    // Close enough, do play animation (jump/roll)
+                    catData.behaviorState.isMoving = false;
+                    aiData?.memory.set("PlayAction", 1);
+                    aiData?.memory.set("PlayActionTime", os.time());
+                }
+            } else if (playAction === 1) {
+                // Play animation phase
+                const playStartTime = aiData?.memory.get("PlayActionTime") as number || os.time();
+                if (os.time() - playStartTime > 2) {
+                    // Switch back to running
+                    aiData?.memory.set("PlayAction", 0);
+                }
+                catData.behaviorState.isMoving = false;
+            }
+
+            // Consume energy while playing
+            catData.physicalState.energy = math.max(0, catData.physicalState.energy - 1);
+            
+            // Increase playfulness mood
+            if (catData.moodState.currentMood !== "Playful") {
+                CatManager.UpdateCatMood(catId, "Playful", 0.8);
+            }
+        } else {
+            this.SetCatAction(catId, "Idle");
+        }
+    }
+
+    private static ExecuteApproachFood(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const targetUserId = aiData?.memory.get("SocialTarget") as number;
+        const targetPlayer = targetUserId ? Players.GetPlayerByUserId(targetUserId) : undefined;
+        const targetChar = targetPlayer?.Character;
+        const targetHRP = targetChar?.FindFirstChild("HumanoidRootPart") as Part;
+
+        if (targetHRP) {
+            const currentPos = catData.currentState.position;
+            const targetPos = targetHRP.Position;
+            const dist = targetPos.sub(currentPos).Magnitude;
+
+            // Walk towards player with food
+            if (dist > 3) {
+                catData.behaviorState.targetPosition = targetPos;
+                catData.behaviorState.isMoving = true;
+
+                const diff = targetPos.sub(currentPos);
+                const direction = diff.Unit;
+                const speed = catData.profile.physical.movementSpeed * 0.1;
+                catData.currentState.position = currentPos.add(direction.mul(speed));
+            } else {
+                // Close enough, switch to circling or sitting
+                catData.behaviorState.isMoving = false;
+                const playfulness = catData.profile.personality.playfulness;
+                if (playfulness > 0.5) {
+                    this.SetCatAction(catId, "CirclePlayer");
+                } else {
+                    this.SetCatAction(catId, "SitAndMeow");
+                }
+            }
+        } else {
+            this.SetCatAction(catId, "Idle");
+        }
+    }
+
+    private static ExecuteCirclePlayer(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const targetUserId = aiData?.memory.get("SocialTarget") as number;
+        const targetPlayer = targetUserId ? Players.GetPlayerByUserId(targetUserId) : undefined;
+        const targetChar = targetPlayer?.Character;
+        const targetHRP = targetChar?.FindFirstChild("HumanoidRootPart") as Part;
+
+        if (targetHRP) {
+            const currentPos = catData.currentState.position;
+            const targetPos = targetHRP.Position;
+            const dist = targetPos.sub(currentPos).Magnitude;
+
+            // Circle around player at 3-5 studs distance
+            const desiredDistance = 4;
+            const angle = aiData?.memory.get("CircleAngle") as number || 0;
+            const newAngle = angle + 0.1; // Increment angle for circling
+
+            aiData?.memory.set("CircleAngle", newAngle);
+
+            // Calculate position on circle around player
+            const circleX = targetPos.X + math.cos(newAngle) * desiredDistance;
+            const circleZ = targetPos.Z + math.sin(newAngle) * desiredDistance;
+            const circleTarget = new Vector3(circleX, targetPos.Y, circleZ);
+            const groundedTarget = this.FindGroundPosition(circleTarget);
+
+            catData.behaviorState.targetPosition = groundedTarget;
+            catData.behaviorState.isMoving = true;
+
+            const diff = groundedTarget.sub(currentPos);
+            if (diff.Magnitude > 0.5) {
+                const direction = diff.Unit;
+                const speed = catData.profile.physical.movementSpeed * 0.08;
+                catData.currentState.position = currentPos.add(direction.mul(speed));
+            }
+
+            // Occasionally meow while circling
+            if (math.random() < 0.1) {
+                catData.behaviorState.currentAction = "Meow";
+            }
+        } else {
+            this.SetCatAction(catId, "Idle");
+        }
+    }
+
+    private static ExecuteSitAndMeow(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const targetUserId = aiData?.memory.get("SocialTarget") as number;
+        const targetPlayer = targetUserId ? Players.GetPlayerByUserId(targetUserId) : undefined;
+
+        catData.behaviorState.isMoving = false;
+
+        if (targetPlayer?.Character?.PrimaryPart) {
+            catData.behaviorState.targetPosition = targetPlayer.Character.PrimaryPart.Position;
+            
+            // Alternate between sitting and meowing
+            const lastMeowTime = aiData?.memory.get("LastMeowTime") as number || 0;
+            if (os.time() - lastMeowTime > 3) {
+                // Meow every 3 seconds
+                catData.behaviorState.currentAction = "Meow";
+                aiData?.memory.set("LastMeowTime", os.time());
+            }
+        } else {
+            this.SetCatAction(catId, "Idle");
+        }
     }
 
     private static SetupBehaviorTree(catId: string, profileName: string): BehaviorTree {

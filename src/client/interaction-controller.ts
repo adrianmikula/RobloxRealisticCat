@@ -52,7 +52,76 @@ const InteractionController = Knit.CreateController({
             }
         });
 
+        // Setup tool usage detection
+        this.SetupToolUsageDetection();
+
         print("InteractionController started");
+    },
+
+    SetupToolUsageDetection() {
+        const UserInputService = game.GetService("UserInputService");
+        const Players = game.GetService("Players");
+        const localPlayer = Players.LocalPlayer;
+
+        // Detect when player clicks (uses tool)
+        UserInputService.InputBegan.Connect((input, gameProcessed) => {
+            if (gameProcessed) return;
+
+            // Check for mouse click or touch
+            if (input.UserInputType === Enum.UserInputType.MouseButton1 || 
+                input.UserInputType === Enum.UserInputType.Touch) {
+                
+                const character = localPlayer.Character;
+                if (!character) return;
+
+                const hrp = character.FindFirstChild("HumanoidRootPart") as BasePart;
+                if (!hrp) return;
+
+                // Check if player has a tool equipped
+                const CatService = Knit.GetService("CatService") as unknown as {
+                    UseTool(toolType: string, position?: Vector3): void;
+                    GetAllCats(player: Player): Record<string, Partial<CatData>>;
+                };
+
+                // Get current tool from server (we'll need to track this client-side too)
+                // For now, we'll check if there's a tool in the character
+                const tool = character.FindFirstChildOfClass("Tool");
+                if (tool) {
+                    // Determine tool type from tool name or use a mapping
+                    const toolType = this.GetToolTypeFromName(tool.Name);
+                    if (toolType) {
+                        CatService.UseTool(toolType, hrp.Position);
+                    }
+                }
+            }
+        });
+    },
+
+    GetToolTypeFromName(toolName: string): string | undefined {
+        // Map tool names to tool types
+        const toolMapping: Record<string, string> = {
+            "BasicToy": "basicToys",
+            "PremiumToy": "premiumToys",
+            "BasicFood": "basicFood",
+            "PremiumFood": "premiumFood",
+            "GroomingTool": "groomingTools",
+            "MedicalItem": "medicalItems",
+        };
+
+        // Try exact match first
+        if (toolMapping[toolName]) {
+            return toolMapping[toolName];
+        }
+
+        // Try case-insensitive partial match
+        const lowerName = toolName.lower();
+        for (const [key, value] of pairs(toolMapping)) {
+            if (lowerName.find(key.lower())[0] !== undefined) {
+                return value;
+            }
+        }
+
+        return undefined;
     },
 
     SetupInteractions(catId: string, catData: CatData) {
