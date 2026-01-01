@@ -144,4 +144,10 @@ export class InteractionHandler {
         const key = `${player.UserId}_${catId}_${interactionType}`;
         this.interactionCooldowns.set(key, os.time() + 2);
     }
+
+    // For testing: Clear cooldown for a specific interaction
+    public static ClearCooldown(player: Player, catId: string, interactionType: string): void {
+        const key = `${player.UserId}_${catId}_${interactionType}`;
+        this.interactionCooldowns.delete(key);
+    }
 }

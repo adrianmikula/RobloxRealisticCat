@@ -428,40 +428,28 @@ _G.require = function(module)
             -- Check if this is the player-manager module
             if string.match(module._sourcePath or "", "player%-manager") then
                 if result and type(result) == "table" then
-                    -- Check for PlayerManager class export (result.PlayerManager)
-                    if result.PlayerManager and type(result.PlayerManager) == "table" then
-                        local playerManager = result.PlayerManager
-                        if playerManager.HandlePlayerAdded then
-                            local originalHandlePlayerAdded = playerManager.HandlePlayerAdded
-                            playerManager.HandlePlayerAdded = function(self, player)
-                                originalHandlePlayerAdded(self, player)
-                                -- Also register with Players service mock
-                                local playersService = game:GetService("Players")
-                                if playersService and playersService._addPlayer then
-                                    playersService._addPlayer(player)
-                                end
-                            end
-                        end
-                    -- Check if result itself is PlayerManager class (direct export)
-                    elseif result.HandlePlayerAdded then
-                        local originalHandlePlayerAdded = result.HandlePlayerAdded
-                        result.HandlePlayerAdded = function(self, player)
-                            originalHandlePlayerAdded(self, player)
-                            -- Also register with Players service mock
+                    -- Try to find HandlePlayerAdded in various places
+                    local handlePlayerAdded = nil
+                    if result.PlayerManager and result.PlayerManager.HandlePlayerAdded then
+                        handlePlayerAdded = result.PlayerManager.HandlePlayerAdded
+                        result.PlayerManager.HandlePlayerAdded = function(self, player)
+                            handlePlayerAdded(self, player)
                             local playersService = game:GetService("Players")
-                            if playersService and playersService._addPlayer then
+                            if playersService and playersService._addPlayer and player then
                                 playersService._addPlayer(player)
                             end
                         end
-                        -- Also check __index for class methods
-                        if result.__index and result.__index.HandlePlayerAdded then
-                            local originalHandlePlayerAdded = result.__index.HandlePlayerAdded
-                            result.__index.HandlePlayerAdded = function(self, player)
-                                originalHandlePlayerAdded(self, player)
-                                local playersService = game:GetService("Players")
-                                if playersService and playersService._addPlayer then
-                                    playersService._addPlayer(player)
-                                end
+                    end
+                    -- Check if result itself is PlayerManager class (for static methods)
+                    -- In TypeScript, static methods are on the class itself
+                    if result.HandlePlayerAdded and type(result.HandlePlayerAdded) == "function" then
+                        handlePlayerAdded = result.HandlePlayerAdded
+                        result.HandlePlayerAdded = function(self, player)
+                            -- For static methods, self is the class
+                            handlePlayerAdded(self, player)
+                            local playersService = game:GetService("Players")
+                            if playersService and playersService._addPlayer and player then
+                                playersService._addPlayer(player)
                             end
                         end
                     end
@@ -742,7 +730,7 @@ end
 local function runSpecsInHierarchy(inst)
     for _, child in pairs(inst._children) do
         if child.ClassName == "ModuleScript" then 
-             if string.match(child.Name, "spec") or string.match(child._sourcePath or "", "spec%.lua") then
+            if string.match(child.Name, "spec") or string.match(child._sourcePath or "", "spec%.lua") then
                 print("Loading spec: " .. child.Name)
                 -- Clear hooks for the new spec file
                 for k in pairs(beforeEachHooks) do beforeEachHooks[k] = nil end
@@ -751,9 +739,9 @@ local function runSpecsInHierarchy(inst)
                 if type(m) == "function" then
                     m()
                 end
-             end
-             -- Also recurse inside ModuleScript (it can have children)
-             runSpecsInHierarchy(child) 
+            end
+            -- Also recurse inside ModuleScript (it can have children)
+            runSpecsInHierarchy(child) 
         elseif child.ClassName == "Folder" then
             runSpecsInHierarchy(child)
         end
