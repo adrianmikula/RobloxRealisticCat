@@ -1,6 +1,7 @@
 import { CatManager } from "./cat-manager";
 import { RelationshipManager } from "./relationship-manager";
-import { CatProfileData, INTERACTION_TYPES } from "shared/cat-profile-data";
+import { CatProfileData } from "shared/cat-profile-data";
+import { INTERACTION_TYPES } from "shared/config/behavior-config";
 import { CatData, InteractionEffect } from "shared/cat-types";
 
 export class InteractionHandler {

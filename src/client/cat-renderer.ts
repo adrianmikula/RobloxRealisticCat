@@ -2,11 +2,46 @@ import { Workspace, Players } from "@rbxts/services";
 import { CatData, MoodState } from "shared/cat-types";
 import { AnimationHandler } from "./animation-handler";
 import { PhysicsService } from "@rbxts/services";
+import { MODEL_MAPPING, DEFAULT_MODEL } from "shared/config/model-config";
 
 export class CatRenderer {
     private static catVisuals = new Map<string, Model>();
     private static moodIndicators = new Map<string, BillboardGui>();
     private static previousActions = new Map<string, string>();
+
+    /**
+     * Get the model name for a given cat profile type.
+     * Falls back to default if profile type not found or model doesn't exist.
+     */
+    private static GetModelNameForProfile(profileType: string, modelsFolder: Instance): string {
+        // Try to get the mapped model name
+        const mappedModelName = MODEL_MAPPING[profileType];
+        
+        if (mappedModelName) {
+            // Check if the model exists
+            const model = modelsFolder.FindFirstChild(mappedModelName) as Model;
+            if (model) {
+                return mappedModelName;
+            } else {
+                warn(`Model "${mappedModelName}" for profile type "${profileType}" not found, using default`);
+            }
+        }
+        
+        // Fall back to default model
+        const defaultModel = modelsFolder.FindFirstChild(DEFAULT_MODEL) as Model;
+        if (defaultModel) {
+            return DEFAULT_MODEL;
+        }
+        
+        // If default doesn't exist, try any model in the folder
+        const anyModel = modelsFolder.FindFirstChildOfClass("Model");
+        if (anyModel) {
+            warn(`Default model "${DEFAULT_MODEL}" not found, using "${anyModel.Name}"`);
+            return anyModel.Name;
+        }
+        
+        return DEFAULT_MODEL; // Return name even if not found, will error later
+    }
 
     public static CreateCatVisual(catId: string, catData: CatData): Model | undefined {
         const modelsFolder = Workspace.FindFirstChild("Models");
@@ -15,13 +50,19 @@ export class CatRenderer {
             return;
         }
 
-        const petraModel = modelsFolder.FindFirstChild("Petra") as Model;
-        if (!petraModel) {
-            warn("Petra cat model not found in Workspace.Models");
+        // Determine which model to use based on profile type
+        // The profile type is stored in the breed field or can be inferred from personality
+        // For now, we'll use a simple mapping based on the profile's breed or personality
+        const profileType = this.DetermineProfileType(catData);
+        const modelName = this.GetModelNameForProfile(profileType, modelsFolder);
+        
+        const catModel = modelsFolder.FindFirstChild(modelName) as Model | undefined;
+        if (!catModel) {
+            warn(`Cat model "${modelName}" not found in Workspace.Models for profile type "${profileType}"`);
             return;
         }
 
-        const catVisual = petraModel.Clone();
+        const catVisual = catModel.Clone();
         catVisual.Name = `Cat_${catId}`;
 
         const humanoid = catVisual.FindFirstChildOfClass("Humanoid");
@@ -272,6 +313,57 @@ export class CatRenderer {
             Playful: Color3.fromRGB(255, 193, 7),
         };
         return colors[moodType] || Color3.fromRGB(189, 189, 189);
+    }
+
+    /**
+     * Determine the profile type from cat data.
+     * Uses breed if available, otherwise infers from personality traits.
+     */
+    private static DetermineProfileType(catData: CatData): string {
+        // First, try to use the breed field
+        if (catData.profile.breed && catData.profile.breed !== "Default") {
+            // Map breed names to profile types
+            const breedToProfile: Record<string, string> = {
+                "Tabby": "Friendly",
+                "Black Cat": "Independent",
+                "Calico": "Calico",
+                "Siamese": "Siamese",
+                "Maine Coon": "Friendly",
+                "Persian": "Independent",
+                "Bengal": "Siamese",
+            };
+            
+            const profileType = breedToProfile[catData.profile.breed];
+            if (profileType) {
+                return profileType;
+            }
+        }
+        
+        // Infer from personality traits
+        const personality = catData.profile.personality;
+        
+        // High friendliness + high playfulness = Friendly
+        if (personality.friendliness > 0.7 && personality.playfulness > 0.7) {
+            return "Friendly";
+        }
+        
+        // High independence = Independent
+        if (personality.independence > 0.7) {
+            return "Independent";
+        }
+        
+        // High curiosity = Calico
+        if (personality.curiosity > 0.8) {
+            return "Calico";
+        }
+        
+        // High playfulness = Siamese
+        if (personality.playfulness > 0.8) {
+            return "Siamese";
+        }
+        
+        // Default to Friendly
+        return "Friendly";
     }
 
     private static purringSounds = new Map<string, Sound>();
