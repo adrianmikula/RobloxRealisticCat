@@ -2,6 +2,14 @@
 
 This guide explains how to upload or re-upload animations so they work with your Roblox game project.
 
+## Reference: High-Quality Cat Animations
+
+For inspiration and examples of professional cat animations, see:
+- **Creator Spotlight: Animator Bavelly** - [How Animator Bavelly Brings Warrior Cats and Prehistoric Animals to Life](https://devforum.roblox.com/t/creator-spotlight-how-animator-bavelly-brings-warrior-cats-and-prehistoric-animals-to-life/3730925)
+  - This DevForum post showcases realistic, high-quality cat animations
+  - Great reference for animation style and quality standards
+  - Includes tips and techniques for realistic animal animations
+
 ## Why Re-upload Animations?
 
 Roblox requires that animations be owned by the same account or group as your game to work properly. If you're using animation IDs from other creators or the default Roblox animations, they may not play correctly.

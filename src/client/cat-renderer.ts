@@ -3,11 +3,13 @@ import { CatData, MoodState } from "shared/cat-types";
 import { AnimationHandler } from "./animation-handler";
 import { PhysicsService } from "@rbxts/services";
 import { MODEL_MAPPING, DEFAULT_MODEL } from "shared/config/model-config";
+import { CatNameGenerator } from "shared/cat-name-generator";
 
 export class CatRenderer {
     private static catVisuals = new Map<string, Model>();
     private static moodIndicators = new Map<string, BillboardGui>();
     private static previousActions = new Map<string, string>();
+    private static lastAnimationState = new Map<string, string>(); // Track last animation to prevent rapid switching
 
     /**
      * Get the model name for a given cat profile type.
@@ -64,6 +66,20 @@ export class CatRenderer {
 
         const catVisual = catModel.Clone();
         catVisual.Name = `Cat_${catId}`;
+
+        // Remove or disable scripts that come with the model
+        // These scripts can cause errors and we don't need them since we manage behavior ourselves
+        for (const descendant of catVisual.GetDescendants()) {
+            if (descendant.IsA("Script") || descendant.IsA("LocalScript") || descendant.IsA("ModuleScript")) {
+                // Disable scripts instead of destroying to preserve model structure
+                // Some models might reference scripts, so disabling is safer
+                if (descendant.IsA("Script") || descendant.IsA("LocalScript")) {
+                    descendant.Enabled = false;
+                }
+                // ModuleScripts can't be disabled, so we'll just leave them
+                // They won't run unless required by another script
+            }
+        }
 
         const humanoid = catVisual.FindFirstChildOfClass("Humanoid");
         if (humanoid) {
@@ -126,6 +142,7 @@ export class CatRenderer {
 
         // Clean up previous action tracking
         this.previousActions.delete(catId);
+        this.lastAnimationState.delete(catId);
     }
 
     public static UpdateCatVisual(catId: string, catData: CatData) {
@@ -151,6 +168,8 @@ export class CatRenderer {
             if (catData.behaviorState.isMoving && targetPos) {
                 if (targetPos.sub(currentPos).Magnitude > 0.5) {
                     humanoid.MoveTo(targetPos);
+                    // Debug: Log when Walk animation should be triggered
+                    print(`[CatRenderer] Cat ${catId} is moving - triggering Walk animation`);
                     AnimationHandler.PlayAnimation(catId, "Walk", humanoid);
                 } else {
                     humanoid.MoveTo(currentPos);
@@ -158,6 +177,10 @@ export class CatRenderer {
                 }
             } else {
                 humanoid.MoveTo(currentPos);
+                // Debug: Log when action animation should be triggered
+                if (action && action !== "Idle") {
+                    print(`[CatRenderer] Cat ${catId} action: ${action} - triggering animation`);
+                }
                 AnimationHandler.PlayAnimation(catId, action || "Idle", humanoid);
 
                 // Special handling for Purr: look at the player who petted
@@ -188,7 +211,26 @@ export class CatRenderer {
                     }
                 } else {
                     // Rotation for LookAt/Follow/Meow/RollOver
-                    if ((action === "LookAt" || action === "Follow" || action === "Meow" || action === "RollOver") && targetPos) {
+                    // Check if actionData has a player ID to look at (for Follow/LookAt after petting)
+                    const actionData = catData.behaviorState.actionData as { reactingToPlayerId?: number } | undefined;
+                    if (actionData?.reactingToPlayerId && (action === "LookAt" || action === "Follow")) {
+                        // Look at the specific player
+                        const player = Players.GetPlayerByUserId(actionData.reactingToPlayerId);
+                        const char = player?.Character;
+                        const hrp = char?.FindFirstChild("HumanoidRootPart") as Part;
+                        if (hrp) {
+                            const playerPos = hrp.Position;
+                            const currentPos = visual.PrimaryPart?.Position || catData.currentState.position;
+                            const lookVector = playerPos.sub(currentPos).Unit;
+                            const flatLookVector = new Vector3(lookVector.X, 0, lookVector.Z).Unit;
+                            if (flatLookVector.Magnitude > 0) {
+                                visual.SetPrimaryPartCFrame(CFrame.lookAt(currentPos, currentPos.add(flatLookVector)));
+                            }
+                        }
+                    } else if ((action === "LookAt" || action === "Follow" || action === "Meow" || action === "RollOver" || 
+                                action === "LookAtToy" || action === "PlayWithToy" || action === "ApproachFood" || 
+                                action === "CirclePlayer" || action === "SitAndMeow") && targetPos) {
+                        // Fallback to targetPos if no specific player
                         const lookVector = targetPos.sub(currentPos).Unit;
                         const flatLookVector = new Vector3(lookVector.X, 0, lookVector.Z).Unit;
                         if (flatLookVector.Magnitude > 0) {
@@ -207,9 +249,19 @@ export class CatRenderer {
             if (action === "Purr") {
                 this.ShowTemporaryMoodText(catId, "Purr...", Color3.fromRGB(255, 200, 255));
             }
+
+            // Tool reaction visuals
+            if (action === "LookAtToy" || action === "PlayWithToy") {
+                this.ShowTemporaryMoodText(catId, "🎾", Color3.fromRGB(255, 200, 100));
+            }
+            
+            if (action === "ApproachFood" || action === "CirclePlayer" || action === "SitAndMeow") {
+                this.ShowTemporaryMoodText(catId, "🍽️", Color3.fromRGB(255, 150, 100));
+            }
         }
 
         this.UpdateMoodIndicator(catId, catData.moodState);
+        this.UpdateRelationshipDisplay(catId, catData);
         this.UpdateHoldingState(catId, visual, catData);
     }
 
@@ -252,8 +304,8 @@ export class CatRenderer {
 
         const indicator = new Instance("BillboardGui");
         indicator.Name = "MoodIndicator";
-        indicator.Size = new UDim2(4, 0, 1, 0);
-        indicator.StudsOffset = new Vector3(0, 3, 0);
+        indicator.Size = new UDim2(0, 300, 0, 120); // Larger to fit 3 lines
+        indicator.StudsOffset = new Vector3(0, 3.5, 0);
         indicator.AlwaysOnTop = true;
 
         const frame = new Instance("Frame");
@@ -261,14 +313,47 @@ export class CatRenderer {
         frame.BackgroundTransparency = 1;
         frame.Parent = indicator;
 
-        const label = new Instance("TextLabel");
-        label.Size = new UDim2(1, 0, 1, 0);
-        label.BackgroundTransparency = 1;
-        label.Text = catData.moodState.currentMood;
-        label.TextColor3 = this.GetMoodColor(catData.moodState.currentMood);
-        label.TextScaled = true;
-        label.Font = Enum.Font.GothamBold;
-        label.Parent = frame;
+        // Line 1: Cat Name (Large)
+        const nameLabel = new Instance("TextLabel");
+        nameLabel.Name = "NameLabel";
+        nameLabel.Size = new UDim2(1, 0, 0, 40);
+        nameLabel.Position = new UDim2(0, 0, 0, 0);
+        nameLabel.BackgroundTransparency = 1;
+        nameLabel.Text = CatNameGenerator.GetName(catId, catData.profile);
+        nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255);
+        nameLabel.TextScaled = true;
+        nameLabel.Font = Enum.Font.GothamBold;
+        nameLabel.TextStrokeTransparency = 0.5;
+        nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0);
+        nameLabel.Parent = frame;
+
+        // Line 2: Relationship (Medium)
+        const relationshipLabel = new Instance("TextLabel");
+        relationshipLabel.Name = "RelationshipLabel";
+        relationshipLabel.Size = new UDim2(1, 0, 0, 30);
+        relationshipLabel.Position = new UDim2(0, 0, 0, 40);
+        relationshipLabel.BackgroundTransparency = 1;
+        relationshipLabel.Text = "Neutral"; // Will be updated
+        relationshipLabel.TextColor3 = Color3.fromRGB(200, 200, 200);
+        relationshipLabel.TextScaled = true;
+        relationshipLabel.Font = Enum.Font.Gotham;
+        relationshipLabel.TextStrokeTransparency = 0.5;
+        relationshipLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0);
+        relationshipLabel.Parent = frame;
+
+        // Line 3: Mood (Medium)
+        const moodLabel = new Instance("TextLabel");
+        moodLabel.Name = "MoodLabel";
+        moodLabel.Size = new UDim2(1, 0, 0, 30);
+        moodLabel.Position = new UDim2(0, 0, 0, 70);
+        moodLabel.BackgroundTransparency = 1;
+        moodLabel.Text = catData.moodState.currentMood;
+        moodLabel.TextColor3 = this.GetMoodColor(catData.moodState.currentMood);
+        moodLabel.TextScaled = true;
+        moodLabel.Font = Enum.Font.Gotham;
+        moodLabel.TextStrokeTransparency = 0.5;
+        moodLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0);
+        moodLabel.Parent = frame;
 
         const head = visual.FindFirstChild("Head") as BasePart || visual.FindFirstChild("Torso") as BasePart;
         if (head) {
@@ -277,16 +362,62 @@ export class CatRenderer {
         }
 
         this.moodIndicators.set(catId, indicator);
+        
+        // Update relationship immediately
+        this.UpdateRelationshipDisplay(catId, catData);
     }
 
     private static UpdateMoodIndicator(catId: string, moodState: MoodState) {
         const indicator = this.moodIndicators.get(catId);
         if (!indicator) return;
 
-        const label = indicator.FindFirstChild("Frame")?.FindFirstChild("TextLabel") as TextLabel;
-        if (label && label.GetAttribute("IsTemporary") !== true) {
-            label.Text = moodState.currentMood;
-            label.TextColor3 = this.GetMoodColor(moodState.currentMood);
+        const frame = indicator.FindFirstChild("Frame") as Frame;
+        if (!frame) return;
+
+        const moodLabel = frame.FindFirstChild("MoodLabel") as TextLabel;
+        if (moodLabel && moodLabel.GetAttribute("IsTemporary") !== true) {
+            moodLabel.Text = moodState.currentMood;
+            moodLabel.TextColor3 = this.GetMoodColor(moodState.currentMood);
+        }
+    }
+
+    /**
+     * Update the relationship display for a cat.
+     */
+    private static UpdateRelationshipDisplay(catId: string, catData: CatData) {
+        const indicator = this.moodIndicators.get(catId);
+        if (!indicator) return;
+
+        const frame = indicator.FindFirstChild("Frame") as Frame;
+        if (!frame) return;
+
+        const relationshipLabel = frame.FindFirstChild("RelationshipLabel") as TextLabel;
+        if (!relationshipLabel) return;
+
+        // Get relationship with local player
+        const localPlayer = Players.LocalPlayer;
+        if (!localPlayer) return;
+
+        // We need to get relationship from server - for now, use a placeholder
+        // In a real implementation, this would come from the server via CatData
+        // For now, we'll check if relationship data is available in catData
+        const relationship = catData.socialState.playerRelationships.get(localPlayer.UserId);
+        if (relationship) {
+            relationshipLabel.Text = relationship.relationshipTier;
+            
+            // Color based on relationship tier
+            const relationshipColors: Record<string, Color3> = {
+                "Strangers": Color3.fromRGB(150, 150, 150),
+                "Neutral": Color3.fromRGB(200, 200, 200),
+                "Acquaintances": Color3.fromRGB(100, 200, 255),
+                "Friends": Color3.fromRGB(100, 255, 150),
+                "Close Friends": Color3.fromRGB(255, 200, 100),
+                "Best Friends": Color3.fromRGB(255, 100, 200),
+            };
+            relationshipLabel.TextColor3 = relationshipColors[relationship.relationshipTier] || Color3.fromRGB(200, 200, 200);
+        } else {
+            relationshipLabel.Text = "Neutral";
+            relationshipLabel.TextColor3 = Color3.fromRGB(200, 200, 200);
         }
     }
 
@@ -294,15 +425,18 @@ export class CatRenderer {
         const indicator = this.moodIndicators.get(catId);
         if (!indicator) return;
 
-        const label = indicator.FindFirstChild("Frame")?.FindFirstChild("TextLabel") as TextLabel;
-        if (label) {
-            label.Text = text;
-            label.TextColor3 = color;
-            label.SetAttribute("IsTemporary", true);
+        const frame = indicator.FindFirstChild("Frame") as Frame;
+        if (!frame) return;
+
+        const moodLabel = frame.FindFirstChild("MoodLabel") as TextLabel;
+        if (moodLabel) {
+            moodLabel.Text = text;
+            moodLabel.TextColor3 = color;
+            moodLabel.SetAttribute("IsTemporary", true);
 
             task.delay(1.5, () => {
-                if (label.Parent) {
-                    label.SetAttribute("IsTemporary", false);
+                if (moodLabel.Parent) {
+                    moodLabel.SetAttribute("IsTemporary", false);
                 }
             });
         }

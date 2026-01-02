@@ -28,21 +28,11 @@ function spawnMultipleCats(count: number, profileType: string) {
     }
 }
 
-UserInputService.InputBegan.Connect((input, gameProcessed) => {
-    if (gameProcessed) return;
-
-    if (input.KeyCode === Enum.KeyCode.One) {
-        spawnTestCat("Friendly");
-    } else if (input.KeyCode === Enum.KeyCode.Two) {
-        spawnTestCat("Playful");
-    } else if (input.KeyCode === Enum.KeyCode.Three) {
-        spawnTestCat("Independent");
-    } else if (input.KeyCode === Enum.KeyCode.Four) {
-        spawnMultipleCats(3, "Friendly");
-    }
-});
+// Hotkey-based cat spawning has been removed to allow keyboard numbers 1-4 to be used for tool activation
+// Use the UI controller or chat commands (/spawncat) to spawn cats instead
 
 print("🐱 [TS] Cat Spawning Test Script Loaded!");
+print("Note: Hotkey spawning (1-4 keys) has been disabled. Use UI or /spawncat command instead.");
 print("Keyboard Controls:");
 print("   [1] - Spawn Friendly Cat");
 print("   [2] - Spawn Playful Cat");

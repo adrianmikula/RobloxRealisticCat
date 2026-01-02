@@ -171,14 +171,22 @@ export class CatAI {
         const currentPos = catData.currentState.position;
 
         for (const player of Players.GetPlayers()) {
+            // Defensive check: ensure player has character and humanoid before accessing
+            // This prevents errors from scripts trying to move players without humanoids
             const char = player.Character;
-            const hrp = char?.FindFirstChild("HumanoidRootPart") as Part;
-            if (hrp) {
-                const dist = hrp.Position.sub(currentPos).Magnitude;
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    nearestPlayer = player;
-                }
+            if (!char) continue;
+            
+            // Check for humanoid to avoid errors from scripts trying to move players without humanoids
+            const humanoid = char.FindFirstChildOfClass("Humanoid");
+            if (!humanoid) continue;
+            
+            const hrp = char.FindFirstChild("HumanoidRootPart") as Part;
+            if (!hrp) continue;
+            
+            const dist = hrp.Position.sub(currentPos).Magnitude;
+            if (dist < minDistance) {
+                minDistance = dist;
+                nearestPlayer = player;
             }
         }
 
@@ -218,70 +226,88 @@ export class CatAI {
             
             const toolConfig = currentTool && currentTool !== "none" ? PlayerManager.AVAILABLE_TOOLS[currentTool] : undefined;
 
-            // Check if player is using a toy (recent usage within 2 seconds)
-            const recentToolUsage = PlayerManager.GetRecentToolUsage(nearestPlayer, 2);
+            // Check if player is using a toy (recent usage within 3 seconds) - INCREASED WINDOW
+            const recentToolUsage = PlayerManager.GetRecentToolUsage(nearestPlayer, 3);
             const isUsingToy = recentToolUsage && toolConfig?.type === "toy";
+            
+            // Also check if player recently used food (within 3 seconds)
+            const recentFoodUsage = recentToolUsage && toolConfig?.type === "food";
 
-            // Check if player is holding a toy
-            if (currentTool && toolConfig?.type === "toy" && minDistance < 25) {
-                // Cat looks at player with toy
-                weights.set("LookAtToy", 2.0 + (trust * 1.5) + (catData.profile.personality.playfulness * 2.0));
-                aiData.memory.set("SocialTarget", nearestPlayer.UserId);
-                aiData.memory.set("PlayerTool", currentTool);
-            }
-
-            // Check if player just used a toy (within 2 seconds)
-            if (isUsingToy && minDistance < 20) {
-                // Check if player is facing the cat
-                const char = nearestPlayer.Character;
-                const hrp = char?.FindFirstChild("HumanoidRootPart") as Part;
-                if (hrp) {
-                    const playerPos = hrp.Position;
-                    const toCat = currentPos.sub(playerPos);
-                    const playerLookDirection = hrp.CFrame.LookVector;
-                    const dotProduct = toCat.Unit.Dot(playerLookDirection);
-                    
-                    // If player is facing cat (dot product > 0.5 means within ~60 degrees)
-                    if (dotProduct > 0.5) {
-                        // Cat plays with toy - high priority for playful cats
-                        const playfulness = catData.profile.personality.playfulness;
-                        weights.set("PlayWithToy", 5.0 + (playfulness * 4.0) + (trust * 2.0));
-                        aiData.memory.set("SocialTarget", nearestPlayer.UserId);
-                        aiData.memory.set("PlayerTool", recentToolUsage.toolType);
-                    }
-                }
-            }
-
-            // Check if player is holding food
-            if (currentTool && toolConfig?.type === "food" && minDistance < 30) {
-                // Cat approaches food - higher priority if hungry
-                const hungerWeight = catData.physicalState.hunger > 50 ? 3.0 : 1.0;
-                weights.set("ApproachFood", hungerWeight + (trust * 1.0));
-                aiData.memory.set("SocialTarget", nearestPlayer.UserId);
-                aiData.memory.set("PlayerTool", currentTool);
-            }
-
-            // If cat is near player with food (within 8 studs)
-            if (currentTool && toolConfig?.type === "food" && minDistance < 8) {
-                // Cat circles player or sits and meows
+            // Check if player is holding a toy - INCREASED RANGE AND WEIGHTS
+            if (currentTool && toolConfig?.type === "toy" && minDistance < 40) {
+                // Cat looks at player with toy - much higher priority
                 const playfulness = catData.profile.personality.playfulness;
+                weights.set("LookAtToy", 6.0 + (trust * 2.0) + (playfulness * 3.0));
+                aiData.memory.set("SocialTarget", nearestPlayer.UserId);
+                aiData.memory.set("PlayerTool", currentTool);
+            }
+
+            // Check if player just used a toy (within 3 seconds) - REMOVED FACING REQUIREMENT
+            if (isUsingToy && minDistance < 30) {
+                // Cat plays with toy - high priority for playful cats, no facing requirement
+                const playfulness = catData.profile.personality.playfulness;
+                weights.set("PlayWithToy", 8.0 + (playfulness * 5.0) + (trust * 3.0));
+                aiData.memory.set("SocialTarget", nearestPlayer.UserId);
+                aiData.memory.set("PlayerTool", recentToolUsage.toolType);
+            }
+
+            // Check if player is holding food - INCREASED RANGE AND WEIGHTS
+            if (currentTool && toolConfig?.type === "food" && minDistance < 50) {
+                // Cat approaches food - much higher priority, especially if hungry
+                const hungerWeight = catData.physicalState.hunger > 50 ? 8.0 : 4.0;
+                const trustBonus = trust * 2.0;
+                weights.set("ApproachFood", hungerWeight + trustBonus);
+                aiData.memory.set("SocialTarget", nearestPlayer.UserId);
+                aiData.memory.set("PlayerTool", currentTool);
+            }
+
+            // If cat is near player with food (within 10 studs) - INCREASED RANGE
+            if (currentTool && toolConfig?.type === "food" && minDistance < 10) {
+                // Cat circles player or sits and meows - higher weights
+                const playfulness = catData.profile.personality.playfulness;
+                const hungerBonus = catData.physicalState.hunger / 30; // More impact from hunger
                 if (playfulness > 0.5) {
-                    weights.set("CirclePlayer", 2.0 + (playfulness * 1.5));
+                    weights.set("CirclePlayer", 5.0 + (playfulness * 2.0) + hungerBonus);
                 } else {
-                    weights.set("SitAndMeow", 2.0 + (catData.physicalState.hunger / 50));
+                    weights.set("SitAndMeow", 5.0 + hungerBonus + (trust * 1.5));
                 }
                 aiData.memory.set("SocialTarget", nearestPlayer.UserId);
                 aiData.memory.set("PlayerTool", currentTool);
             }
 
-            // Follow logic
-            if (trust > 0.4 && minDistance > 10 && !currentTool) {
-                weights.set("Follow", (trust - 0.4) * 3.0);
-            }
+            // Check if cat was recently petted by this player
+            const lastPettedBy = aiData.memory.get("LastPettedBy") as number | undefined;
+            const stayUntil = aiData.memory.get("StayNearPlayerUntil") as number | undefined;
+            const wasRecentlyPetted = lastPettedBy === nearestPlayer.UserId && 
+                                      stayUntil !== undefined && 
+                                      os.time() < stayUntil;
 
-            // LookAt logic (only if no special tool behaviors)
-            if (minDistance < 20 && !currentTool) {
-                weights.set("LookAt", 1.0 + trust);
+            // If recently petted, prioritize staying near and looking at the player
+            if (wasRecentlyPetted) {
+                const timeRemaining = stayUntil! - os.time();
+                const urgency = timeRemaining / 15; // Urgency decreases as time passes
+                
+                if (minDistance > 8) {
+                    // Cat should follow if too far
+                    weights.set("Follow", 5.0 + (trust * 2.0) + urgency * 3.0);
+                } else if (minDistance > 4) {
+                    // Cat should approach and look if moderately close
+                    weights.set("Follow", 3.0 + (trust * 1.5) + urgency * 2.0);
+                    weights.set("LookAt", 2.0 + (trust * 1.0) + urgency * 1.5);
+                } else {
+                    // Cat should look at player if very close
+                    weights.set("LookAt", 4.0 + (trust * 2.0) + urgency * 2.0);
+                }
+            } else {
+                // Normal follow logic (only if not recently petted)
+                if (trust > 0.4 && minDistance > 10 && !currentTool) {
+                    weights.set("Follow", (trust - 0.4) * 3.0);
+                }
+
+                // Normal LookAt logic (only if no special tool behaviors and not recently petted)
+                if (minDistance < 20 && !currentTool) {
+                    weights.set("LookAt", 1.0 + trust);
+                }
             }
 
             // Meow logic (hungry or happy/high trust)
@@ -536,7 +562,11 @@ export class CatAI {
 
         catData.behaviorState.isMoving = false;
         if (targetPlayer?.Character?.PrimaryPart) {
-            catData.behaviorState.targetPosition = targetPlayer.Character.PrimaryPart.Position;
+            const targetPos = targetPlayer.Character.PrimaryPart.Position;
+            catData.behaviorState.targetPosition = targetPos;
+            
+            // Store player ID in actionData so client can make cat look at player
+            catData.behaviorState.actionData = { reactingToPlayerId: targetUserId };
         } else {
             this.SetCatAction(catId, "Idle");
         }
@@ -560,7 +590,20 @@ export class CatAI {
 
         catData.behaviorState.isMoving = false;
         if (targetPlayer?.Character?.PrimaryPart) {
-            catData.behaviorState.targetPosition = targetPlayer.Character.PrimaryPart.Position;
+            const targetPos = targetPlayer.Character.PrimaryPart.Position;
+            catData.behaviorState.targetPosition = targetPos;
+            
+            // Store player ID in actionData so client can make cat look at player
+            catData.behaviorState.actionData = { reactingToPlayerId: targetUserId };
+            
+            // If player uses toy while cat is looking, transition to playing
+            const recentToolUsage = PlayerManager.GetRecentToolUsage(targetPlayer, 3);
+            if (recentToolUsage) {
+                const toolConfig = PlayerManager.AVAILABLE_TOOLS[recentToolUsage.toolType];
+                if (toolConfig?.type === "toy") {
+                    this.SetCatAction(catId, "PlayWithToy");
+                }
+            }
         } else {
             this.SetCatAction(catId, "Idle");
         }
@@ -578,18 +621,21 @@ export class CatAI {
             const targetPos = targetHRP.Position;
             const dist = targetPos.sub(currentPos).Magnitude;
 
+            // Store player ID in actionData so client can make cat look at player
+            catData.behaviorState.actionData = { reactingToPlayerId: targetUserId };
+
             // Playful behavior: run around, jump, roll
             // Alternate between different play actions
             const playAction = aiData?.memory.get("PlayAction") as number || 0;
             
             if (playAction === 0 || playAction === undefined) {
-                // Run towards player
-                if (dist > 5) {
+                // Run towards player - stay closer when playing (3 studs instead of 5)
+                if (dist > 3) {
                     catData.behaviorState.targetPosition = targetPos;
                     catData.behaviorState.isMoving = true;
                     const diff = targetPos.sub(currentPos);
                     const direction = diff.Unit;
-                    const speed = catData.profile.physical.movementSpeed * 0.15; // Faster when playing
+                    const speed = catData.profile.physical.movementSpeed * 0.18; // Even faster when playing
                     catData.currentState.position = currentPos.add(direction.mul(speed));
                 } else {
                     // Close enough, do play animation (jump/roll)
@@ -661,6 +707,9 @@ export class CatAI {
         const targetPlayer = targetUserId ? Players.GetPlayerByUserId(targetUserId) : undefined;
         const targetChar = targetPlayer?.Character;
         const targetHRP = targetChar?.FindFirstChild("HumanoidRootPart") as Part;
+
+        // Store player ID in actionData so client can make cat look at player
+        catData.behaviorState.actionData = { reactingToPlayerId: targetUserId };
 
         if (targetHRP) {
             const currentPos = catData.currentState.position;
@@ -906,6 +955,9 @@ export class CatAI {
         const aiData = this.activeCats.get(catId);
         const targetUserId = aiData?.memory.get("SocialTarget") as number;
         const targetPlayer = targetUserId ? Players.GetPlayerByUserId(targetUserId) : undefined;
+
+        // Store player ID in actionData so client can make cat look at player
+        catData.behaviorState.actionData = { reactingToPlayerId: targetUserId };
 
         catData.behaviorState.isMoving = false;
 

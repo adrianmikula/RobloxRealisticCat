@@ -1,6 +1,8 @@
 import { CatManager } from "./cat-manager";
 import { RelationshipManager } from "./relationship-manager";
 import { CatProfileData } from "shared/cat-profile-data";
+import { CatAI } from "./cat-ai";
+import { Players } from "@rbxts/services";
 import { INTERACTION_TYPES } from "shared/config/behavior-config";
 import { CatData, InteractionEffect } from "shared/cat-types";
 
@@ -50,7 +52,7 @@ export class InteractionHandler {
         if (success) {
             this.ApplySuccessfulInteraction(player, catId, interactionType, catData, effects);
         } else {
-            this.ApplyFailedInteraction(player, catId);
+            this.ApplyFailedInteraction(player, catId, catData);
         }
 
         this.SetCooldown(player, catId, interactionType);
@@ -89,7 +91,19 @@ export class InteractionHandler {
         effects: InteractionEffect,
     ) {
         const relChange = effects.relationshipChange || 0.1;
-        RelationshipManager.UpdateRelationship(player, catId, relChange);
+        const relationship = RelationshipManager.UpdateRelationship(player, catId, relChange);
+
+        // Sync relationship to catData so client can access it
+        if (!catData.socialState.playerRelationships.has(player.UserId)) {
+            catData.socialState.playerRelationships.set(player.UserId, relationship);
+        } else {
+            // Update existing relationship
+            const existingRel = catData.socialState.playerRelationships.get(player.UserId)!;
+            existingRel.trustLevel = relationship.trustLevel;
+            existingRel.relationshipScore = relationship.relationshipScore;
+            existingRel.relationshipTier = relationship.relationshipTier;
+            existingRel.lastInteraction = relationship.lastInteraction;
+        }
 
         if (effects.moodEffect) {
             CatManager.UpdateCatMood(catId, effects.moodEffect, 0.7);
@@ -108,22 +122,71 @@ export class InteractionHandler {
             catData.behaviorState.isMoving = false;
         }
 
-        // Special reaction for Pet interaction: cat looks at player and purrs
+        // Special reaction for Pet interaction: cat looks at player and purrs, then stays near them
         if (interactionType === "Pet") {
             const char = player.Character;
             const hrp = char?.FindFirstChild("HumanoidRootPart") as Part;
             if (hrp) {
+                // Store that this player recently petted the cat
+                const aiData = CatAI.GetAIData(catId);
+                if (aiData) {
+                    aiData.memory.set("LastPettedBy", player.UserId);
+                    aiData.memory.set("LastPettedTime", os.time());
+                    aiData.memory.set("StayNearPlayerUntil", os.time() + 15); // Stay near for 15 seconds
+                }
+
+                // Initial purr reaction (3 seconds)
                 catData.behaviorState.currentAction = "Purr";
                 catData.behaviorState.targetPosition = hrp.Position;
                 catData.behaviorState.isMoving = false;
                 catData.behaviorState.actionData = { reactingToPlayerId: player.UserId };
                 
-                // Reset to idle after 3 seconds
+                // After purring, transition to staying near player
                 task.delay(3, () => {
                     const updatedCatData = CatManager.GetCat(catId);
-                    if (updatedCatData && updatedCatData.behaviorState.currentAction === "Purr") {
-                        updatedCatData.behaviorState.currentAction = "Idle";
-                        updatedCatData.behaviorState.actionData = undefined;
+                    const updatedAiData = CatAI.GetAIData(catId);
+                    if (updatedCatData && updatedAiData) {
+                        const stayUntil = updatedAiData.memory.get("StayNearPlayerUntil") as number | undefined;
+                        const pettedPlayerId = updatedAiData.memory.get("LastPettedBy") as number | undefined;
+                        
+                        // If still within the stay-near window, transition to Follow/LookAt
+                        if (stayUntil && os.time() < stayUntil && pettedPlayerId) {
+                            const pettedPlayer = Players.GetPlayerByUserId(pettedPlayerId);
+                            if (pettedPlayer?.Character?.PrimaryPart) {
+                                updatedCatData.behaviorState.currentAction = "Follow";
+                                updatedCatData.behaviorState.targetPosition = pettedPlayer.Character.PrimaryPart.Position;
+                                updatedAiData.memory.set("SocialTarget", pettedPlayerId);
+                            }
+                        } else {
+                            // Time window expired, return to normal behavior
+                            updatedCatData.behaviorState.currentAction = "Idle";
+                            updatedCatData.behaviorState.actionData = undefined;
+                        }
+                    }
+                });
+
+                // Clear the stay-near state after the full duration
+                task.delay(15, () => {
+                    const updatedCatData = CatManager.GetCat(catId);
+                    const updatedAiData = CatAI.GetAIData(catId);
+                    if (updatedCatData && updatedAiData) {
+                        const stayUntil = updatedAiData.memory.get("StayNearPlayerUntil") as number | undefined;
+                        // Only clear if this is still the same petting session
+                        if (stayUntil && os.time() >= stayUntil) {
+                            updatedAiData.memory.delete("LastPettedBy");
+                            updatedAiData.memory.delete("LastPettedTime");
+                            updatedAiData.memory.delete("StayNearPlayerUntil");
+                            
+                            // If cat is still following/looking at this player, transition to idle
+                            if (updatedCatData.behaviorState.currentAction === "Follow" || 
+                                updatedCatData.behaviorState.currentAction === "LookAt") {
+                                const currentTarget = updatedAiData.memory.get("SocialTarget") as number | undefined;
+                                if (currentTarget === player.UserId) {
+                                    updatedCatData.behaviorState.currentAction = "Idle";
+                                    updatedAiData.memory.delete("SocialTarget");
+                                }
+                            }
+                        }
                     }
                 });
             }
@@ -137,8 +200,20 @@ export class InteractionHandler {
         });
     }
 
-    private static ApplyFailedInteraction(player: Player, catId: string) {
-        RelationshipManager.UpdateRelationship(player, catId, -0.05);
+    private static ApplyFailedInteraction(player: Player, catId: string, catData: CatData) {
+        const relationship = RelationshipManager.UpdateRelationship(player, catId, -0.05);
+
+        // Sync relationship to catData so client can access it
+        if (!catData.socialState.playerRelationships.has(player.UserId)) {
+            catData.socialState.playerRelationships.set(player.UserId, relationship);
+        } else {
+            // Update existing relationship
+            const existingRel = catData.socialState.playerRelationships.get(player.UserId)!;
+            existingRel.trustLevel = relationship.trustLevel;
+            existingRel.relationshipScore = relationship.relationshipScore;
+            existingRel.relationshipTier = relationship.relationshipTier;
+            existingRel.lastInteraction = relationship.lastInteraction;
+        }
 
         if (math.random() < 0.3) {
             CatManager.UpdateCatMood(catId, "Annoyed", 0.4);

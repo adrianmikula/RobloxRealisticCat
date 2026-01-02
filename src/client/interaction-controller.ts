@@ -127,8 +127,12 @@ const InteractionController = Knit.CreateController({
             
             // Tool was equipped
             if (tool && tool !== lastToolCheck) {
-                const toolType = this.GetToolTypeFromTool(tool);
-                if (toolType) {
+                // Use pcall to handle any errors from tool scripts
+                const [success, toolType] = pcall(() => {
+                    return this.GetToolTypeFromTool(tool);
+                });
+                
+                if (success && toolType) {
                     CatService.EquipTool(toolType);
                     lastToolCheck = tool;
                     
@@ -140,6 +144,14 @@ const InteractionController = Knit.CreateController({
                             lastToolCheck = undefined;
                         }
                     });
+                } else if (!success) {
+                    // Tool has an error, but we can still try to use it if it has a recognizable name
+                    warn(`Tool "${tool.Name}" has script errors, but attempting to detect type anyway`);
+                    const fallbackType = this.GetToolTypeFromName(tool.Name);
+                    if (fallbackType) {
+                        CatService.EquipTool(fallbackType);
+                        lastToolCheck = tool;
+                    }
                 }
             }
             // Tool was unequipped
@@ -404,40 +416,80 @@ const InteractionController = Knit.CreateController({
         const head = visual.FindFirstChild("Head") as BasePart || visual.PrimaryPart;
         if (!head) return;
 
+        // Map interaction types to simple words/emojis
+        const feedbackText = this.GetInteractionFeedbackText(interactionType, success);
+
         const feedbackGui = new Instance("BillboardGui");
         feedbackGui.Name = "InteractionFeedback";
-        feedbackGui.Size = new UDim2(0, 200, 0, 50);
-        feedbackGui.StudsOffset = new Vector3(0, 2, 0);
+        feedbackGui.Size = new UDim2(0, 150, 0, 60);
+        feedbackGui.StudsOffset = new Vector3(0, 4, 0); // Higher up to not overlap with status
         feedbackGui.AlwaysOnTop = true;
         feedbackGui.Adornee = head;
         feedbackGui.Parent = head;
 
         const frame = new Instance("Frame");
         frame.Size = new UDim2(1, 0, 1, 0);
-        frame.BackgroundColor3 = success ? Color3.fromRGB(76, 175, 80) : Color3.fromRGB(244, 67, 54);
-        frame.BackgroundTransparency = 0.3;
+        frame.BackgroundTransparency = 1; // No background for cleaner look
         frame.BorderSizePixel = 0;
         frame.Parent = feedbackGui;
 
         const label = new Instance("TextLabel");
         label.Size = new UDim2(1, 0, 1, 0);
         label.BackgroundTransparency = 1;
-        label.Text = message;
-        label.TextColor3 = Color3.fromRGB(255, 255, 255);
+        label.Text = feedbackText;
+        label.TextColor3 = success ? Color3.fromRGB(255, 200, 255) : Color3.fromRGB(255, 150, 150);
         label.TextScaled = true;
         label.Font = Enum.Font.GothamBold;
+        label.TextStrokeTransparency = 0.3;
+        label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0);
         label.Parent = frame;
 
         // Animate and destroy
         task.spawn(() => {
-            for (let i = 0; i < 30; i++) {
-                feedbackGui.StudsOffset = new Vector3(0, 2 + i * 0.1, 0);
-                frame.BackgroundTransparency = 0.3 + i * 0.02;
-                label.TextTransparency = i * 0.03;
+            for (let i = 0; i < 40; i++) {
+                feedbackGui.StudsOffset = new Vector3(0, 4 + i * 0.15, 0);
+                label.TextTransparency = i * 0.025;
+                label.TextStrokeTransparency = 0.3 + i * 0.0175;
                 task.wait(0.03);
             }
             feedbackGui.Destroy();
         });
+    },
+
+    /**
+     * Get simple feedback text/emoji for interaction types.
+     */
+    GetInteractionFeedbackText(interactionType: string, success: boolean): string {
+        if (!success) {
+            return "❌";
+        }
+
+        const feedbackMap: Record<string, string> = {
+            "Pet": "❤️", // Heart emoji for petting
+            "Feed": "🍽️", // Food emoji
+            "Play": "🎾", // Toy emoji
+            "Groom": "✨", // Sparkle emoji
+            "Hold": "🤗", // Hug emoji
+            "Heal": "💊", // Medicine emoji
+        };
+
+        // Try to get emoji first, fallback to word
+        const emoji = feedbackMap[interactionType];
+        if (emoji) {
+            return emoji;
+        }
+
+        // Fallback to simple word
+        const wordMap: Record<string, string> = {
+            "Pet": "purr",
+            "Feed": "eat",
+            "Play": "play",
+            "Groom": "groom",
+            "Hold": "hold",
+            "Heal": "heal",
+        };
+
+        return wordMap[interactionType] || interactionType.lower();
     },
 });
 

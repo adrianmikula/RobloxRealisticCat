@@ -17,11 +17,11 @@
 export const MODEL_MAPPING: Record<string, string> = {
     // Profile types mapped to model names
     "Friendly": "Petra",        // Default friendly cat model
-    "Independent": "GreyStripes",     // Independent cat model
-    "Calico": "Jerald",           // Calico cat model
-    "Siamese": "Siamese",          // Siamese cat model
-    "Tabby": "MinecraftCat",          // Siamese cat model
-    "Persian": "Olia",          // Siamese cat model
+    // "Independent": "GreyStripes",     // Independent cat model
+    // "Calico": "Jerald",           // Calico cat model
+    // "Siamese": "GreyStripes",          // Siamese cat model
+    // "Tabby": "MinecraftCat",          // Siamese cat model
+    // "Persian": "GreyStripes",          // Siamese cat model
     // Add more mappings as you add models:
     // "Playful": "PlayfulCatModel",
     // "Curious": "CuriousCatModel",

@@ -31,9 +31,17 @@ const CatServiceObj = Knit.CreateService({
         },
 
         UseTool(player: Player, toolType: string, position?: Vector3): void {
+            // Defensive check: ensure player has character before accessing
             const char = player.Character;
-            const hrp = char?.FindFirstChild("HumanoidRootPart") as Part;
-            const toolPosition = position || hrp?.Position;
+            if (!char) {
+                warn(`Player ${player.Name} has no character when using tool ${toolType}`);
+                // Use a default position if character doesn't exist
+                PlayerManager.RecordToolUsage(player, toolType, position || new Vector3(0, 0, 0));
+                return;
+            }
+            
+            const hrp = char.FindFirstChild("HumanoidRootPart") as Part;
+            const toolPosition = position || hrp?.Position || new Vector3(0, 0, 0);
             PlayerManager.RecordToolUsage(player, toolType, toolPosition);
         },
 
@@ -101,6 +109,22 @@ const CatServiceObj = Knit.CreateService({
 
             CatManager.GetAllCats().forEach((catData, catId) => {
                 CatAI.UpdateCat(catId, catData);
+
+                // Sync relationship data for all players who have interacted with this cat
+                // This ensures the client always has up-to-date relationship info
+                Players.GetPlayers().forEach((player) => {
+                    const relationship = RelationshipManager.GetRelationship(player, catId);
+                    if (!catData.socialState.playerRelationships.has(player.UserId)) {
+                        catData.socialState.playerRelationships.set(player.UserId, relationship);
+                    } else {
+                        // Update existing relationship
+                        const existingRel = catData.socialState.playerRelationships.get(player.UserId)!;
+                        existingRel.trustLevel = relationship.trustLevel;
+                        existingRel.relationshipScore = relationship.relationshipScore;
+                        existingRel.relationshipTier = relationship.relationshipTier;
+                        existingRel.lastInteraction = relationship.lastInteraction;
+                    }
+                });
 
                 if (shouldSync) {
                     this.Client.CatStateUpdate.FireAll(catId, "updated", catData);

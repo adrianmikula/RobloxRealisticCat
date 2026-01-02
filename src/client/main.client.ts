@@ -1,5 +1,6 @@
 import { KnitClient as Knit } from "@rbxts/knit";
 import { LoadingScreen } from "./loading-screen";
+import { AnimationHandler } from "./animation-handler";
 
 // Show loading screen immediately (before any blocking operations)
 LoadingScreen.Initialize();
@@ -27,6 +28,21 @@ task.spawn(() => {
             
             // Wait a moment for services to be ready
             task.wait(0.3);
+            
+            // Validate all animation IDs before loading content
+            LoadingScreen.SetProgress(0.5, "Validating animations...");
+            task.spawn(() => {
+                AnimationHandler.ValidateAllAnimations((progress, message) => {
+                    // Update loading screen with validation progress (0.5 to 0.55)
+                    const validationProgress = 0.5 + (progress * 0.05);
+                    LoadingScreen.SetProgress(validationProgress, message);
+                }).catch((err) => {
+                    warn("[AnimationHandler] Validation error:", err);
+                });
+            });
+            
+            // Wait for validation to complete
+            task.wait(0.5);
             LoadingScreen.SetProgress(0.6, "Loading game content...");
             
             // Give time for initial cat loading (CatController will update progress)

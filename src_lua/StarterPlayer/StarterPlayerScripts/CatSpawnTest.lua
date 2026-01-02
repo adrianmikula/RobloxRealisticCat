@@ -52,35 +52,12 @@ local function spawnMultipleCats(count, profileType)
     end
 end
 
--- Input handling for testing
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    
-    if input.KeyCode == Enum.KeyCode.One then
-        -- Press 1 to spawn a friendly cat
-        spawnTestCat("Friendly")
-    elseif input.KeyCode == Enum.KeyCode.Two then
-        -- Press 2 to spawn a playful cat
-        spawnTestCat("Playful")
-    elseif input.KeyCode == Enum.KeyCode.Three then
-        -- Press 3 to spawn an independent cat
-        spawnTestCat("Independent")
-    elseif input.KeyCode == Enum.KeyCode.Four then
-        -- Press 4 to spawn 3 cats
-        spawnMultipleCats(3, "Friendly")
-    elseif input.KeyCode == Enum.KeyCode.Five then
-        -- Press 5 to test cat removal (if implemented)
-        print("⚠️ Cat removal test not yet implemented")
-    end
-end)
+-- Hotkey-based cat spawning has been removed to allow keyboard numbers 1-4 to be used for tool activation
+-- Use the UI controller or chat commands (/spawncat) to spawn cats instead
 
 -- Print instructions
 print("🐱 Cat Spawning Test Script Loaded!")
-print("Keyboard Controls:")
-print("   [1] - Spawn Friendly Cat")
-print("   [2] - Spawn Playful Cat")
-print("   [3] - Spawn Independent Cat")
-print("   [4] - Spawn 3 Friendly Cats")
-print("   [5] - Test Cat Removal (Not implemented)")
+print("Note: Hotkey spawning (1-4 keys) has been disabled.")
+print("Use the UI controller or /spawncat command to spawn cats instead.")
 print("")
 print("Check the output window for spawn results!")
