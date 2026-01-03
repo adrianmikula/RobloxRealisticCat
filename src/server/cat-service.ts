@@ -53,6 +53,10 @@ const CatServiceObj = Knit.CreateService({
             PlayerManager.UnequipTool(player);
         },
 
+        GetCurrentTool(player: Player): string {
+            return PlayerManager.GetCurrentTool(player) || "none";
+        },
+
         GetAllCats(player: Player): Record<string, Partial<CatData>> {
             const safeCats: Record<string, Partial<CatData>> = {};
             CatManager.GetAllCats().forEach((catData, catId) => {

@@ -164,6 +164,10 @@ export class CatAI {
         weights.set("ApproachCatTree", 0.0);
         weights.set("ClimbCatTree", 0.0);
         weights.set("RestOnCatTree", 0.0);
+        weights.set("ScratchTree", 0.0);
+        weights.set("JumpOnTree", 0.0);
+        weights.set("PlayOnTree", 0.0);
+        weights.set("SleepOnTree", 0.0);
 
         // Find nearest player for social behaviors
         let nearestPlayer: Player | undefined;
@@ -372,10 +376,37 @@ export class CatAI {
                 aiData.memory.set("CatTreeTarget", nearestCatTree);
             }
             
-            // Rest on cat tree if already on it or very close
+            // Scratch tree if close (within 3 studs)
+            if (treeDistance < 3) {
+                const scratchWeight = 2.5 + (curiosity * 1.5) + (catData.profile.personality.playfulness * 1.0);
+                weights.set("ScratchTree", scratchWeight);
+                aiData.memory.set("CatTreeTarget", nearestCatTree);
+            }
+            
+            // Jump on tree if close enough (within 5 studs, high energy)
+            if (treeDistance < 5 && treeDistance > 1 && energy > 60) {
+                const jumpWeight = 3.5 + (curiosity * 2.0) + (catData.profile.personality.playfulness * 2.5);
+                weights.set("JumpOnTree", jumpWeight);
+                aiData.memory.set("CatTreeTarget", nearestCatTree);
+            }
+            
+            // Play on tree if on top or very close (within 2 studs, high playfulness)
+            if (treeDistance < 2 && catData.profile.personality.playfulness > 0.6 && energy > 40) {
+                const playWeight = 4.0 + (catData.profile.personality.playfulness * 3.0) + (curiosity * 1.5);
+                weights.set("PlayOnTree", playWeight);
+                aiData.memory.set("CatTreeTarget", nearestCatTree);
+            }
+            
+            // Rest/Sleep on cat tree if already on it or very close (low energy)
             if (treeDistance < 3) {
                 const restWeight = (energy < 50 ? 5.0 : 2.0) + (independence * 1.5);
                 weights.set("RestOnCatTree", restWeight);
+                
+                // Sleep on tree if very low energy
+                if (energy < 30) {
+                    const sleepWeight = 6.0 + (independence * 2.0);
+                    weights.set("SleepOnTree", sleepWeight);
+                }
                 aiData.memory.set("CatTreeTarget", nearestCatTree);
             }
         }
@@ -462,6 +493,14 @@ export class CatAI {
             this.ExecuteClimbCatTree(catId, catData);
         } else if (action === "RestOnCatTree") {
             this.ExecuteRestOnCatTree(catId, catData);
+        } else if (action === "ScratchTree") {
+            this.ExecuteScratchTree(catId, catData);
+        } else if (action === "JumpOnTree") {
+            this.ExecuteJumpOnTree(catId, catData);
+        } else if (action === "PlayOnTree") {
+            this.ExecutePlayOnTree(catId, catData);
+        } else if (action === "SleepOnTree") {
+            this.ExecuteSleepOnTree(catId, catData);
         } else {
             this.ExecuteIdle(catId, catData);
         }
@@ -947,6 +986,210 @@ export class CatAI {
             } else {
                 // Continue resting
                 aiData?.memory.set("RestStartTime", currentTime);
+            }
+        }
+    }
+
+    /**
+     * Execute scratch tree behavior.
+     */
+    private static ExecuteScratchTree(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const catTree = aiData?.memory.get("CatTreeTarget") as BasePart | undefined;
+        
+        if (!catTree) {
+            this.SetCatAction(catId, "Idle");
+            return;
+        }
+
+        const currentPos = catData.currentState.position;
+        const treePos = catTree.Position;
+        const distance = treePos.sub(currentPos).Magnitude;
+
+        // Stop moving and scratch
+        catData.behaviorState.isMoving = false;
+        
+        // Face the tree
+        if (distance > 0.5) {
+            catData.behaviorState.targetPosition = treePos;
+        }
+
+        // Scratch animation (handled by renderer)
+        // Consume a bit of energy
+        catData.physicalState.energy = math.max(0, catData.physicalState.energy - 0.3);
+        
+        // Scratch for a few seconds, then maybe jump on or play
+        const scratchStartTime = aiData?.memory.get("ScratchStartTime") as number || 0;
+        const currentTime = os.time();
+        
+        if (scratchStartTime === 0) {
+            aiData?.memory.set("ScratchStartTime", currentTime);
+        } else if (currentTime - scratchStartTime > 3) {
+            // Done scratching, maybe jump on or play
+            aiData?.memory.delete("ScratchStartTime");
+            
+            const playfulness = catData.profile.personality.playfulness;
+            if (playfulness > 0.7 && catData.physicalState.energy > 50) {
+                this.SetCatAction(catId, "JumpOnTree");
+            } else if (playfulness > 0.5) {
+                this.SetCatAction(catId, "PlayOnTree");
+            } else {
+                this.SetCatAction(catId, "Idle");
+            }
+        }
+    }
+
+    /**
+     * Execute jump on tree behavior.
+     */
+    private static ExecuteJumpOnTree(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const catTree = aiData?.memory.get("CatTreeTarget") as BasePart | undefined;
+        
+        if (!catTree) {
+            this.SetCatAction(catId, "Idle");
+            return;
+        }
+
+        const currentPos = catData.currentState.position;
+        const treeTop = this.FindCatTreeTop(catTree);
+        const distance = treeTop.sub(currentPos).Magnitude;
+        const heightDiff = treeTop.Y - currentPos.Y;
+
+        // If we're on the top platform
+        if (distance < 2 && heightDiff < 1) {
+            // Successfully jumped on, now play or rest
+            catData.currentState.position = treeTop;
+            catData.behaviorState.isMoving = false;
+            
+            const playfulness = catData.profile.personality.playfulness;
+            if (playfulness > 0.6) {
+                this.SetCatAction(catId, "PlayOnTree");
+            } else {
+                this.SetCatAction(catId, "RestOnCatTree");
+            }
+        } else {
+            // Jump towards the top of the tree
+            catData.behaviorState.targetPosition = treeTop;
+            catData.behaviorState.isMoving = true;
+
+            const diff = treeTop.sub(currentPos);
+            const direction = diff.Unit;
+            // Faster movement for jumping
+            const speed = catData.profile.physical.movementSpeed * 0.15;
+            catData.currentState.position = currentPos.add(direction.mul(speed));
+            
+            // Consume more energy while jumping
+            catData.physicalState.energy = math.max(0, catData.physicalState.energy - 1.5);
+        }
+    }
+
+    /**
+     * Execute play on tree behavior.
+     */
+    private static ExecutePlayOnTree(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const catTree = aiData?.memory.get("CatTreeTarget") as BasePart | undefined;
+        
+        if (!catTree) {
+            this.SetCatAction(catId, "Idle");
+            return;
+        }
+
+        const currentPos = catData.currentState.position;
+        const treeTop = this.FindCatTreeTop(catTree);
+        const distance = treeTop.sub(currentPos).Magnitude;
+
+        // Stay on the tree top
+        if (distance > 1) {
+            catData.currentState.position = treeTop;
+        }
+        
+        catData.behaviorState.isMoving = false;
+
+        // Play animation (handled by renderer)
+        // Consume energy while playing
+        catData.physicalState.energy = math.max(0, catData.physicalState.energy - 1);
+        
+        // Set playful mood
+        if (catData.moodState.currentMood !== "Playful") {
+            CatManager.UpdateCatMood(catId, "Playful", 0.8);
+        }
+        
+        // Play for a while, then maybe rest or explore
+        const playStartTime = aiData?.memory.get("PlayStartTime") as number || 0;
+        const currentTime = os.time();
+        
+        if (playStartTime === 0) {
+            aiData?.memory.set("PlayStartTime", currentTime);
+        } else if (currentTime - playStartTime > 5) {
+            // Done playing
+            aiData?.memory.delete("PlayStartTime");
+            
+            // If low energy, rest. Otherwise explore
+            if (catData.physicalState.energy < 40) {
+                this.SetCatAction(catId, "SleepOnTree");
+            } else {
+                this.SetCatAction(catId, "Explore");
+                aiData?.memory.delete("CatTreeTarget");
+            }
+        }
+    }
+
+    /**
+     * Execute sleep on tree behavior.
+     */
+    private static ExecuteSleepOnTree(catId: string, catData: CatData) {
+        const aiData = this.activeCats.get(catId);
+        const catTree = aiData?.memory.get("CatTreeTarget") as BasePart | undefined;
+        
+        if (!catTree) {
+            this.SetCatAction(catId, "Idle");
+            return;
+        }
+
+        const currentPos = catData.currentState.position;
+        const treeTop = this.FindCatTreeTop(catTree);
+        const distance = treeTop.sub(currentPos).Magnitude;
+
+        // Stay on the tree top
+        catData.behaviorState.isMoving = false;
+        
+        if (distance > 1) {
+            catData.currentState.position = treeTop;
+        }
+
+        // Restore energy while sleeping
+        catData.physicalState.energy = math.min(100, catData.physicalState.energy + 3);
+        
+        // Set tired mood (or happy if well-rested)
+        if (catData.physicalState.energy < 50) {
+            if (catData.moodState.currentMood !== "Tired") {
+                CatManager.UpdateCatMood(catId, "Tired", 0.6);
+            }
+        } else {
+            if (catData.moodState.currentMood === "Tired") {
+                CatManager.UpdateCatMood(catId, "Happy", 0.7);
+            }
+        }
+        
+        // Sleep for a while, then wake up
+        const sleepStartTime = aiData?.memory.get("SleepStartTime") as number || 0;
+        const currentTime = os.time();
+        
+        if (sleepStartTime === 0) {
+            aiData?.memory.set("SleepStartTime", currentTime);
+        } else if (currentTime - sleepStartTime > 15) {
+            // Slept for 15 seconds, wake up
+            aiData?.memory.delete("SleepStartTime");
+            aiData?.memory.delete("CatTreeTarget");
+            
+            // If energy is high, explore. Otherwise continue sleeping if still tired
+            if (catData.physicalState.energy > 70) {
+                this.SetCatAction(catId, "Explore");
+            } else {
+                // Continue sleeping
+                aiData?.memory.set("SleepStartTime", currentTime);
             }
         }
     }

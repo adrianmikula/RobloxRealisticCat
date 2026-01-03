@@ -79,5 +79,11 @@ export const INTERACTION_TYPES: Record<string, InteractionEffect> = {
         energyCost: 2,
         successChance: 0.4, // Harder than petting
     },
+    Play: {
+        relationshipChange: 0.2,
+        moodEffect: "Playful",
+        energyCost: 15,
+        successChance: 0.7,
+    },
 };
 

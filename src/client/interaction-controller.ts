@@ -2,21 +2,26 @@ import { KnitClient as Knit } from "@rbxts/knit";
 import { CollectionService, Players, Workspace } from "@rbxts/services";
 import { CatData } from "shared/cat-types";
 
+type ToolType = "none" | "basicFood" | "premiumFood" | "basicToys" | "premiumToys" | "groomingTools" | "medicalItems";
+
 interface CatPrompts {
     pet: ProximityPrompt;
     hold: ProximityPrompt;
     feed: ProximityPrompt;
+    pickUp: ProximityPrompt; // Separate prompt for pick up/put down with Q key
 }
 
 const InteractionController = Knit.CreateController({
     Name: "InteractionController",
 
     catPrompts: new Map<string, CatPrompts>(),
+    currentTool: "none" as ToolType,
 
     KnitStart() {
         const CatService = Knit.GetService("CatService") as unknown as {
             InteractWithCat(catId: string, interactionType: string): Promise<{ success: boolean; message: string }>;
             CatStateUpdate: { Connect(callback: (catId: string, updateType: string, catData?: CatData) => void): void };
+            GetCurrentTool(): string;
         };
 
         CatService.CatStateUpdate.Connect((catId, updateType, catData) => {
@@ -57,8 +62,77 @@ const InteractionController = Knit.CreateController({
         
         // Setup tool equip/unequip detection
         this.SetupToolEquipDetection();
+        
+        // Periodically update prompts based on current tool
+        this.SetupPromptUpdateLoop();
+        
+        // Setup global Q key handler for putting down held cats
+        this.SetupGlobalPickUpHandler();
 
         print("InteractionController started");
+    },
+
+    SetupGlobalPickUpHandler() {
+        const UserInputService = game.GetService("UserInputService");
+        const Players = game.GetService("Players");
+        const localPlayer = Players.LocalPlayer;
+
+        UserInputService.InputBegan.Connect((input, gameProcessed) => {
+            if (gameProcessed) return;
+
+            // Check for Q key press
+            if (input.KeyCode === Enum.KeyCode.Q) {
+                // Check if player is holding any cat
+                const CatService = Knit.GetService("CatService") as unknown as {
+                    GetAllCats(player: Player): Record<string, Partial<CatData>>;
+                    InteractWithCat(catId: string, interactionType: string): Promise<{ success: boolean; message: string }>;
+                };
+                
+                const allCats = CatService.GetAllCats(localPlayer);
+                
+                // Find any cat being held by this player
+                for (const [catId, catData] of pairs(allCats)) {
+                    if (catData && catData.behaviorState && catData.behaviorState.heldByPlayerId === localPlayer.UserId) {
+                        // Player is holding this cat, put it down
+                        CatService.InteractWithCat(catId as string, "Hold");
+                        break; // Only put down one cat at a time
+                    }
+                }
+            }
+        });
+    },
+
+    SetupPromptUpdateLoop() {
+        const CatService = Knit.GetService("CatService") as unknown as {
+            GetCurrentTool(): string;
+        };
+        
+        task.spawn(() => {
+            while (true) {
+                const newTool = CatService.GetCurrentTool();
+                if (newTool !== this.currentTool) {
+                    this.currentTool = newTool as ToolType;
+                    // Update all prompts for all cats
+                    this.UpdateAllPrompts();
+                }
+                task.wait(0.5); // Check every 0.5 seconds
+            }
+        });
+    },
+
+    UpdateAllPrompts() {
+        const CatService = Knit.GetService("CatService") as unknown as {
+            GetAllCats(player: Player): Record<string, Partial<CatData>>;
+        };
+        const localPlayer = Players.LocalPlayer;
+        const allCats = CatService.GetAllCats(localPlayer);
+        
+        for (const [catId, catData] of pairs(allCats)) {
+            if (catData && catData.behaviorState && catData.moodState && catData.currentState) {
+                const fullCatData = catData as unknown as CatData;
+                this.UpdatePrompts(catId as string, fullCatData);
+            }
+        }
     },
 
     SetupToolUsageDetection() {
@@ -135,6 +209,10 @@ const InteractionController = Knit.CreateController({
                 if (success && toolType) {
                     CatService.EquipTool(toolType);
                     lastToolCheck = tool;
+                    this.currentTool = toolType as ToolType;
+                    
+                    // Immediately update all prompts
+                    this.UpdateAllPrompts();
                     
                     // Also listen for when this tool is removed
                     tool.AncestryChanged.Connect(() => {
@@ -142,6 +220,9 @@ const InteractionController = Knit.CreateController({
                             // Tool was removed
                             CatService.UnequipTool();
                             lastToolCheck = undefined;
+                            this.currentTool = "none";
+                            // Immediately update all prompts
+                            this.UpdateAllPrompts();
                         }
                     });
                 } else if (!success) {
@@ -158,6 +239,9 @@ const InteractionController = Knit.CreateController({
             else if (!tool && lastToolCheck) {
                 CatService.UnequipTool();
                 lastToolCheck = undefined;
+                this.currentTool = "none";
+                // Immediately update all prompts
+                this.UpdateAllPrompts();
             }
         };
 
@@ -313,6 +397,19 @@ const InteractionController = Knit.CreateController({
         // Clean up any existing prompts first
         this.CleanupInteractions(catId);
 
+        // Get current tool to set initial prompt text
+        const CatService = Knit.GetService("CatService") as unknown as {
+            GetCurrentTool(): string;
+        };
+        const currentTool = CatService.GetCurrentTool();
+        this.currentTool = currentTool as ToolType;
+        
+        // Determine initial prompt text based on tool
+        const isFoodTool = currentTool === "basicFood" || currentTool === "premiumFood";
+        const isToyTool = currentTool === "basicToys" || currentTool === "premiumToys";
+        const feedPromptText = isFoodTool ? "Feed" : (isToyTool ? "Play" : "Feed");
+        const feedInteractionType = isToyTool ? "Play" : "Feed";
+
         const prompts: CatPrompts = {
             pet: this.CreatePrompt(attachPart, "Pet", "Pet Cat", 6, () => {
                 this.HandleInteraction(catId, "Pet");
@@ -320,9 +417,16 @@ const InteractionController = Knit.CreateController({
             hold: this.CreatePrompt(attachPart, "Hold", "Pick Up", 6, () => {
                 this.HandleInteraction(catId, "Hold");
             }),
-            feed: this.CreatePrompt(attachPart, "Feed", "Feed Cat", 6, () => {
-                this.HandleInteraction(catId, "Feed");
+            feed: this.CreatePrompt(attachPart, "Feed", feedPromptText, 6, () => {
+                // Dynamically determine interaction type based on current tool
+                const CatServiceForTool = Knit.GetService("CatService") as unknown as {
+                    GetCurrentTool(): string;
+                };
+                const tool = CatServiceForTool.GetCurrentTool();
+                const interactionType = (tool === "basicToys" || tool === "premiumToys") ? "Play" : "Feed";
+                this.HandleInteraction(catId, interactionType);
             }),
+            pickUp: this.CreatePickUpPrompt(attachPart, catId, catData),
         };
 
         this.catPrompts.set(catId, prompts);
@@ -339,6 +443,19 @@ const InteractionController = Knit.CreateController({
         const isHeldByPlayer = catData.behaviorState.heldByPlayerId === localPlayer.UserId;
         const isHeldByOther = catData.behaviorState.heldByPlayerId !== undefined && !isHeldByPlayer;
 
+        // Get current tool to determine prompt text
+        const CatService = Knit.GetService("CatService") as unknown as {
+            GetCurrentTool(): string;
+        };
+        const currentTool = CatService.GetCurrentTool();
+        this.currentTool = currentTool as ToolType;
+        
+        // Determine tool type from tool ID
+        // Food tools: basicFood, premiumFood
+        // Toy tools: basicToys, premiumToys
+        const isFoodTool = currentTool === "basicFood" || currentTool === "premiumFood";
+        const isToyTool = currentTool === "basicToys" || currentTool === "premiumToys";
+
         // Update Hold prompt based on state
         if (isHeldByPlayer) {
             prompts.hold.ActionText = "Release";
@@ -350,13 +467,43 @@ const InteractionController = Knit.CreateController({
             prompts.hold.Enabled = true;
         }
 
+        // Update Pick Up prompt (Q key) based on state
+        if (isHeldByPlayer) {
+            prompts.pickUp.ActionText = "Put Down";
+            prompts.pickUp.Enabled = true;
+            prompts.pickUp.MaxActivationDistance = 10; // Can put down from further away
+        } else if (isHeldByOther) {
+            prompts.pickUp.Enabled = false; // Can't pick up if someone else is holding
+        } else {
+            prompts.pickUp.ActionText = "Pick Up";
+            prompts.pickUp.Enabled = true;
+            prompts.pickUp.MaxActivationDistance = 6;
+        }
+
         // Disable other prompts if cat is being held
         if (isHeldByPlayer || isHeldByOther) {
             prompts.pet.Enabled = false;
             prompts.feed.Enabled = false;
         } else {
             prompts.pet.Enabled = true;
-            prompts.feed.Enabled = true;
+            
+            // Update feed/play prompt based on current tool
+            // Note: We can't easily disconnect/reconnect ProximityPrompt.Triggered,
+            // so we'll use a wrapper function that checks the current tool at trigger time
+            // The prompt text is updated above, and HandleInteraction will use the correct type
+            if (isFoodTool) {
+                // Player is holding food - show "Feed" prompt
+                prompts.feed.ActionText = "Feed";
+                prompts.feed.Enabled = true;
+            } else if (isToyTool) {
+                // Player is holding toy - show "Play" prompt
+                prompts.feed.ActionText = "Play";
+                prompts.feed.Enabled = true;
+            } else {
+                // No tool - show default "Feed" prompt
+                prompts.feed.ActionText = "Feed";
+                prompts.feed.Enabled = true;
+            }
         }
     },
 
@@ -366,6 +513,7 @@ const InteractionController = Knit.CreateController({
             prompts.pet.Destroy();
             prompts.hold.Destroy();
             prompts.feed.Destroy();
+            prompts.pickUp.Destroy();
             this.catPrompts.delete(catId);
         }
     },
@@ -384,6 +532,30 @@ const InteractionController = Knit.CreateController({
         prompt.Parent = parent;
 
         prompt.Triggered.Connect(callback);
+
+        return prompt;
+    },
+
+    CreatePickUpPrompt(parent: BasePart, catId: string, catData: CatData): ProximityPrompt {
+        const localPlayer = Players.LocalPlayer;
+        const isHeldByPlayer = catData.behaviorState.heldByPlayerId === localPlayer.UserId;
+        const actionText = isHeldByPlayer ? "Put Down" : "Pick Up";
+        
+        const prompt = new Instance("ProximityPrompt");
+        prompt.Name = "PickUp";
+        prompt.ActionText = actionText;
+        prompt.ObjectText = "Cat";
+        prompt.MaxActivationDistance = isHeldByPlayer ? 10 : 6; // Can put down from further away
+        prompt.HoldDuration = 0.3; // Faster for pick up/put down
+        prompt.KeyboardKeyCode = Enum.KeyCode.Q; // Q key for pick up/put down
+        prompt.GamepadKeyCode = Enum.KeyCode.ButtonY;
+        prompt.ClickablePrompt = true;
+        prompt.AutoLocalize = false;
+        prompt.Parent = parent;
+
+        prompt.Triggered.Connect(() => {
+            this.HandleInteraction(catId, "Hold");
+        });
 
         return prompt;
     },
